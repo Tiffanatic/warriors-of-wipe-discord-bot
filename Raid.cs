@@ -218,9 +218,15 @@ internal class Raid
                 }
                 else if (Raids.Data.TryGetValue(component.Message.Id, out var raidData3))
                 {
+                    if (raidData3.Members.Count == 0)
+                    {
+                        await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
+                        return;
+                    }
+                    var hasHelpers = raidData3.Members.Any(m => m.Helper);
                     var players = string.Join(", ", raidData3.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
                     var helpers = string.Join(", ", raidData3.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-                    await component.RespondAsync($"Ping! {raidData3.Title}: {players} (and helpers {helpers})", ephemeral: false);
+                    await component.RespondAsync($"Ping! {raidData3.Title}: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}", ephemeral: false);
                 }
                 else
                 {
