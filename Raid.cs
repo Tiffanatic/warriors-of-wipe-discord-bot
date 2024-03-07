@@ -71,6 +71,7 @@ internal class Raid
     private const ulong MentorRoleId = 1208606814770565131UL;
     private const ulong ModRoleId = 1208599020134600734UL;
     private const ulong SproutRoleId = 1208606685615099955UL;
+    private readonly DiscordSocketClient client;
     private readonly Json<Dictionary<ulong, RaidData>> Raids = new("raid.json");
     private readonly Json<Dictionary<ulong, string>> UserJobs = new("userjobs.json");
     [Serializable]
@@ -92,9 +93,12 @@ internal class Raid
 
     public Raid(DiscordSocketClient client)
     {
+        this.client = client;
         client.SlashCommandExecuted += SlashCommandExecuted;
         client.ButtonExecuted += ButtonExecuted;
         client.MessageDeleted += MessageDeleted;
+        // TODO
+        // client.LatencyUpdated += TickUpdate;
     }
 
     private static MessageComponent BuildMessageComponents()
@@ -223,6 +227,7 @@ internal class Raid
     {
         if (command.CommandName != "raidcreate")
             return;
+        // TODO: Voice channel linking
         var options = command.Data.Options.ToList();
         if (options.Count != 2)
             return;
@@ -271,6 +276,7 @@ internal class Raid
                                 isSprout |= role == SproutRoleId;
                             }
                         }
+                        // TODO: Cap members at 4/8
                         raidData.Members.Add(new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor));
                         CleanSaveRaids();
                         await component.UpdateAsync(m => m.Embed = BuildEmbed(raidData));
@@ -360,6 +366,13 @@ internal class Raid
                 raid.Members.Sort((a, b) => IndexOfJob(a.Job).CompareTo(IndexOfJob(b.Job)));
             }
         }
+        if (outdated is not null)
+        {
+            foreach (var outd in outdated)
+            {
+                Raids.Data.Remove(outd);
+            }
+        }
         Raids.Save();
     }
 
@@ -382,4 +395,18 @@ internal class Raid
         return Task.CompletedTask;
     }
 
+    private long oldTickUpdate;
+    private async Task TickUpdate(int o, int n)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        foreach (var (_, raid) in Raids.Data)
+        {
+            const int future = 1800;
+            if (now < raid.Time && oldTickUpdate + future < raid.Time && raid.Time <= now + future)
+            {
+                // TODO: Send ping message
+            }
+        }
+        oldTickUpdate = now;
+    }
 }
