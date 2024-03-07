@@ -1,0 +1,12 @@
+/config.json
+/obj/
+/bin/
+messages.txt
+games.json
+tmpban.json
+twitterbonker.json
+memberizer.json
+log.db
+/.vs/
+/.idea/
+/.vscode/
