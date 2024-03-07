@@ -12,7 +12,7 @@ internal class Raid
             .WithName("raidcreate")
             .WithDescription("Create a raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
-            .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone", isRequired: true)
+            .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone (defaults to ST)", isRequired: true)
             .Build()
     ];
 
@@ -20,9 +20,9 @@ internal class Raid
 
     private static readonly Job[] Jobs =
     [
-        new("PLD", "PLDe", "Paladin"),
-        new("DNC", "DNCe", "Dancer"),
-        new("NIN", "NINe", "Ninja"),
+        new("PLD", "PLD", "Paladin"),
+        new("NIN", "NIN", "Ninja"),
+        new("DNC", "DNC", "Dancer"),
     ];
 
     private const string sprout = "🌱";
@@ -51,6 +51,7 @@ internal class Raid
     {
         client.SlashCommandExecuted += SlashCommandExecuted;
         client.ButtonExecuted += ButtonExecuted;
+        client.MessageDeleted += MessageDeleted;
     }
 
     private static MessageComponent BuildMessageComponents()
@@ -181,10 +182,10 @@ internal class Raid
             case "ping":
                 if (component.User is SocketGuildUser user)
                 {
-                    if (user.Roles.All(r => r.Id != 1208606814770565131UL && r.Id != 1208599020134600734))
-                    {
-                        await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
-                    }
+                    // if (user.Roles.All(r => r.Id != 1208606814770565131UL && r.Id != 1208599020134600734))
+                    // {
+                    //     await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
+                    // }
                 }
                 if (Raids.Data.TryGetValue(component.Message.Id, out var raidData3))
                 {
@@ -246,4 +247,12 @@ internal class Raid
         }
         await component.RespondAsync("You don't have a job selected - first, select your job, then try again", ephemeral: true, components: builder.Build());
     }
+
+    private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
+    {
+        Raids.Data.Remove(message.Id);
+        CleanSaveRaids();
+        return Task.CompletedTask;
+    }
+
 }
