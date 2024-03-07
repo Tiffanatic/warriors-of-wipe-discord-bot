@@ -16,43 +16,54 @@ internal class Raid
             .Build()
     ];
 
-    private record struct Job(string Id, string Emote, string Name, int Row);
+    private enum RoleType
+    {
+        Tank,
+        Healer,
+        Dps,
+        AllRounder,
+    }
+
+    private record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
 
     // warriors of wipe original:
     // <:Tank:1211492267441922048>
     // <:Healer:1211492332193579019>
     // <:DPS:1211492203466068078>
 
+    private const string TankEmote = "<:Tank:1211492267441922048>";
+    private const string HealerEmote = "<:Healer:1211492332193579019>";
+    private const string DpsEmote = "<:DPS:1211492203466068078>";
     private static readonly Job[] Jobs =
     [
-        new("PLD", "<:Paladin:1215315435382382663>", "Paladin", 0),
-        new("WAR", "<:Warrior:1215315451408818216>", "Warrior", 0),
-        new("DRK", "<:DarkKnight:1215315422744674437>", "Dark Knight", 0),
-        new("GNB", "<:Gunbreaker:1215315427266265088>", "Gunbreaker", 0),
-        new("TNK", "<:Tank:1211492267441922048>", "Omni-tank", 0),
+        new("PLD", "<:Paladin:1215315435382382663>", "Paladin", RoleType.Tank, 0),
+        new("WAR", "<:Warrior:1215315451408818216>", "Warrior", RoleType.Tank, 0),
+        new("DRK", "<:DarkKnight:1215315422744674437>", "Dark Knight", RoleType.Tank, 0),
+        new("GNB", "<:Gunbreaker:1215315427266265088>", "Gunbreaker", RoleType.Tank, 0),
+        new("TNK", TankEmote, "Omni-tank", RoleType.Tank, 0),
 
-        new("WHM", "<:WhiteMage:1215315454403289118>", "White Mage", 1),
-        new("SCH", "<:Scholar:1215315447440998452>", "Scholar", 1),
-        new("AST", "<:Astrologian:1215315415547510804>", "Astrologian", 1),
-        new("SGE", "<:Sage:1215315441866776617>", "Sage", 1),
-        new("HLR", "<:Healer:1211492332193579019>", "Omni-healer", 1),
+        new("WHM", "<:WhiteMage:1215315454403289118>", "White Mage", RoleType.Healer,1),
+        new("SCH", "<:Scholar:1215315447440998452>", "Scholar", RoleType.Healer, 1),
+        new("AST", "<:Astrologian:1215315415547510804>", "Astrologian", RoleType.Healer, 1),
+        new("SGE", "<:Sage:1215315441866776617>", "Sage", RoleType.Healer, 1),
+        new("HLR", HealerEmote, "Omni-healer", RoleType.Healer, 1),
 
-        new("MNK", "<:Monk:1215315431435272222>", "Monk", 2),
-        new("DRG", "<:Dragoon:1215315425286430730>", "Dragoon", 2),
-        new("NIN", "<:Ninja:1215315433414987887>", "Ninja", 2),
-        new("SAM", "<:Samurai:1215315444362125364>", "Samurai", 2),
-        new("RPR", "<:Reaper:1215315437743505448>", "Reaper", 2),
+        new("MNK", "<:Monk:1215315431435272222>", "Monk", RoleType.Dps, 2),
+        new("DRG", "<:Dragoon:1215315425286430730>", "Dragoon", RoleType.Dps, 2),
+        new("NIN", "<:Ninja:1215315433414987887>", "Ninja", RoleType.Dps, 2),
+        new("SAM", "<:Samurai:1215315444362125364>", "Samurai", RoleType.Dps, 2),
+        new("RPR", "<:Reaper:1215315437743505448>", "Reaper", RoleType.Dps, 2),
 
-        new("BRD", "<:Bard:1215315416805802035>", "Bard", 3),
-        new("MCH", "<:Machinist:1215315429397102613>", "Machinist", 3),
-        new("DNC", "<:Dancer:1215315420668764231>", "Dancer", 3),
+        new("BRD", "<:Bard:1215315416805802035>", "Bard", RoleType.Dps, 3),
+        new("MCH", "<:Machinist:1215315429397102613>", "Machinist", RoleType.Dps, 3),
+        new("DNC", "<:Dancer:1215315420668764231>", "Dancer", RoleType.Dps, 3),
 
-        new("BLM", "<:BlackMage:1215315418563223592>", "Black Mage", 4),
-        new("SMN", "<:Summoner:1215315493561307176>", "Summoner", 4),
-        new("RDM", "<:RedMage:1215315492198293534>", "Red Mage", 4),
-        new("DPS", "<:DPS:1211492203466068078>", "Omni-dps", 4),
+        new("BLM", "<:BlackMage:1215315418563223592>", "Black Mage", RoleType.Dps, 4),
+        new("SMN", "<:Summoner:1215315493561307176>", "Summoner", RoleType.Dps, 4),
+        new("RDM", "<:RedMage:1215315492198293534>", "Red Mage", RoleType.Dps, 4),
+        new("DPS", DpsEmote, "Omni-dps", RoleType.Dps, 4),
 
-        new("ALR", "<:Allrounder:1215319950747508736>", "All-rounder", 4),
+        new("ALR", "<:Allrounder:1215319950747508736>", "All-rounder", RoleType.AllRounder, 4),
     ];
 
     private const string sprout = "🌱";
@@ -99,6 +110,99 @@ internal class Raid
         return components.Build();
     }
 
+    private static Job? JobFromId(string jobId)
+    {
+        foreach (var j in Jobs)
+        {
+            if (j.Id == jobId)
+            {
+                return j;
+            }
+        }
+        return null;
+    }
+
+    static string FormatMember(RaidDataMember raidDataMember)
+    {
+        var jobEmote = JobFromId(raidDataMember.Job)?.Emote ?? raidDataMember.Job;
+        return $"{jobEmote} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{MentionUtils.MentionUser(raidDataMember.UserId)}";
+    }
+
+    private static IEnumerable<string> FormatPlayerList(IEnumerable<RaidDataMember> members)
+    {
+        int tanks = 0;
+        int healers = 0;
+        int dps = 0;
+        // todo: bad repetative code, newspaper bap
+        foreach (var member in members)
+        {
+            if (JobFromId(member.Job) is Job job)
+            {
+                switch (job.RoleType)
+                {
+                    case RoleType.Tank:
+                        tanks++;
+                        break;
+                    case RoleType.Healer:
+                        while (tanks < 2)
+                        {
+                            yield return TankEmote + " ---";
+                            tanks++;
+                        }
+                        healers++;
+                        break;
+                    case RoleType.Dps:
+                        while (tanks < 2)
+                        {
+                            yield return TankEmote + " ---";
+                            tanks++;
+                        }
+                        while (healers < 2)
+                        {
+                            yield return HealerEmote + " ---";
+                            healers++;
+                        }
+                        dps++;
+                        break;
+                    case RoleType.AllRounder:
+                        while (tanks < 2)
+                        {
+                            yield return TankEmote + " ---";
+                            tanks++;
+                        }
+                        while (healers < 2)
+                        {
+                            yield return HealerEmote + " ---";
+                            healers++;
+                        }
+                        while (dps < 4)
+                        {
+                            yield return DpsEmote + " ---";
+                            dps++;
+                        }
+                        break;
+                }
+            }
+
+            yield return FormatMember(member);
+        }
+        while (tanks < 2)
+        {
+            yield return TankEmote + " ---";
+            tanks++;
+        }
+        while (healers < 2)
+        {
+            yield return HealerEmote + " ---";
+            healers++;
+        }
+        while (dps < 4)
+        {
+            yield return DpsEmote + " ---";
+            dps++;
+        }
+    }
+
     private static Embed BuildEmbed(RaidData raidData)
     {
         EmbedBuilder embed = new()
@@ -107,24 +211,11 @@ internal class Raid
             Description = $"<t:{raidData.Time}:F>",
             Color = new Color(0xff1155)
         };
-        static string FormatMember(RaidDataMember raidDataMember)
-        {
-            var job = raidDataMember.Job;
-            foreach (var j in Jobs)
-            {
-                if (j.Id == raidDataMember.Job)
-                {
-                    job = j.Emote;
-                    break;
-                }
-            }
-            return $"{job} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{MentionUtils.MentionUser(raidDataMember.UserId)}";
-        }
 
-        var players = string.Join("\n", raidData.Members.Where(m => !m.Helper).Select(FormatMember));
+        var players = string.Join("\n", FormatPlayerList(raidData.Members.Where(m => !m.Helper)));
         var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMember));
-        embed.AddField("Players", string.IsNullOrWhiteSpace(players) ? "---" : players, true);
-        embed.AddField("Helpers", string.IsNullOrWhiteSpace(helpers) ? "---" : helpers, true);
+        embed.AddField("Confirmed raiders", string.IsNullOrWhiteSpace(players) ? "---" : players, true);
+        embed.AddField("Helpers available", string.IsNullOrWhiteSpace(helpers) ? "---" : helpers, true);
         return embed.Build();
     }
 
