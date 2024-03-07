@@ -16,18 +16,50 @@ internal class Raid
             .Build()
     ];
 
-    private record struct Job(string Id, string Emote, string Name);
+    private record struct Job(string Id, string Emote, string Name, int Row);
+
+    // warriors of wipe original:
+    // <:Tank:1211492267441922048>
+    // <:Healer:1211492332193579019>
+    // <:DPS:1211492203466068078>
 
     private static readonly Job[] Jobs =
     [
-        new("PLD", "PLD", "Paladin"),
-        new("NIN", "NIN", "Ninja"),
-        new("DNC", "DNC", "Dancer"),
+        new("PLD", "<:Paladin:1215315435382382663>", "Paladin", 0),
+        new("WAR", "<:Warrior:1215315451408818216>", "Warrior", 0),
+        new("DRK", "<:DarkKnight:1215315422744674437>", "Dark Knight", 0),
+        new("GNB", "<:Gunbreaker:1215315427266265088>", "Gunbreaker", 0),
+        new("TNK", "<:Tank:1211492267441922048>", "Omni-tank", 0),
+
+        new("WHM", "<:WhiteMage:1215315454403289118>", "White Mage", 1),
+        new("SCH", "<:Scholar:1215315447440998452>", "Scholar", 1),
+        new("AST", "<:Astrologian:1215315415547510804>", "Astrologian", 1),
+        new("SGE", "<:Sage:1215315441866776617>", "Sage", 1),
+        new("HLR", "<:Healer:1211492332193579019>", "Omni-healer", 1),
+
+        new("MNK", "<:Monk:1215315431435272222>", "Monk", 2),
+        new("DRG", "<:Dragoon:1215315425286430730>", "Dragoon", 2),
+        new("NIN", "<:Ninja:1215315433414987887>", "Ninja", 2),
+        new("SAM", "<:Samurai:1215315444362125364>", "Samurai", 2),
+        new("RPR", "<:Reaper:1215315437743505448>", "Reaper", 2),
+
+        new("BRD", "<:Bard:1215315416805802035>", "Bard", 3),
+        new("MCH", "<:Machinist:1215315429397102613>", "Machinist", 3),
+        new("DNC", "<:Dancer:1215315420668764231>", "Dancer", 3),
+
+        new("BLM", "<:BlackMage:1215315418563223592>", "Black Mage", 4),
+        new("SMN", "<:Summoner:1215315493561307176>", "Summoner", 4),
+        new("RDM", "<:RedMage:1215315492198293534>", "Red Mage", 4),
+        new("DPS", "<:DPS:1211492203466068078>", "Omni-dps", 4),
+
+        new("ALR", "<:Allrounder:1215319950747508736>", "All-rounder", 4),
     ];
 
     private const string sprout = "🌱";
     private const string crown = "👑";
-
+    private const ulong MentorRoleId = 1208606814770565131UL;
+    private const ulong ModRoleId = 1208599020134600734UL;
+    private const ulong SproutRoleId = 1208606685615099955UL;
     private readonly Json<Dictionary<ulong, RaidData>> Raids = new("raid.json");
     private readonly Json<Dictionary<ulong, string>> UserJobs = new("userjobs.json");
     [Serializable]
@@ -140,12 +172,12 @@ internal class Raid
                     {
                         raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
                         bool isMentor = false, isSprout = false;
-                        if (component.User is SocketGuildUser guildUser)
+                        if (component.User is IGuildUser guildUser)
                         {
-                            foreach (var role in guildUser.Roles)
+                            foreach (var role in guildUser.RoleIds)
                             {
-                                isMentor = role.Id == 1208606814770565131UL;
-                                isSprout = role.Id == 1208606685615099955UL;
+                                isMentor |= role == MentorRoleId;
+                                isSprout |= role == SproutRoleId;
                             }
                         }
                         raidData.Members.Add(new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor));
@@ -180,17 +212,15 @@ internal class Raid
                 await component.RespondAsync(ok ? "Class reset!" : "You already don't have a class selected", ephemeral: true);
                 break;
             case "ping":
-                if (component.User is SocketGuildUser user)
+                if (component.User is IGuildUser user && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
                 {
-                    // if (user.Roles.All(r => r.Id != 1208606814770565131UL && r.Id != 1208599020134600734))
-                    // {
-                    //     await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
-                    // }
+                    await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
                 }
-                if (Raids.Data.TryGetValue(component.Message.Id, out var raidData3))
+                else if (Raids.Data.TryGetValue(component.Message.Id, out var raidData3))
                 {
-                    var pings = string.Join(", ", raidData3.Members.Select(m => MentionUtils.MentionUser(m.UserId)));
-                    await component.RespondAsync($"Ping for the raiders for {raidData3.Title}: {pings}", ephemeral: false);
+                    var players = string.Join(", ", raidData3.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+                    var helpers = string.Join(", ", raidData3.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+                    await component.RespondAsync($"Ping! {raidData3.Title}: {players} (and helpers {helpers})", ephemeral: false);
                 }
                 else
                 {
@@ -243,7 +273,7 @@ internal class Raid
         for (int i = 0; i < Jobs.Length; i++)
         {
             var job = Jobs[i];
-            builder.WithButton(job.Name, job.Id, ButtonStyle.Secondary);
+            builder.WithButton(job.Name, job.Id, ButtonStyle.Secondary, Emote.Parse(job.Emote), row: job.Row);
         }
         await component.RespondAsync("You don't have a job selected - first, select your job, then try again", ephemeral: true, components: builder.Build());
     }
