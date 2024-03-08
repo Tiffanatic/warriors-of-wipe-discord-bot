@@ -15,11 +15,13 @@ internal enum RoleType
 internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
 
 [Serializable]
-internal class RaidData(string title, long time, ulong channel, ContentComp comp, List<RaidDataMember> members)
+internal class RaidData(string title, bool hasPinged, long time, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
 {
     public string Title = title;
+    public bool hasPinged = hasPinged;
     public long Time = time;
     public ulong Channel = channel;
+    public ulong VoiceChannel = voiceChannel;
     public ContentComp Comp = comp;
     public List<RaidDataMember> Members = members;
 }
@@ -44,9 +46,18 @@ internal class Raid
     [
         new SlashCommandBuilder()
             .WithName("raidcreate")
-            .WithDescription("Create a raid")
+            .WithDescription("Create a 8-person raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone (defaults to ST)", isRequired: true)
+            .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
+            .Build(),
+
+        new SlashCommandBuilder()
+            .WithName("raidcreatelightparty")
+            .WithDescription("Create a raid for light party (4 person) content")
+            .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
+            .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone (defaults to ST)", isRequired: true)
+            .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
             .Build()
     ];
 
@@ -87,6 +98,7 @@ internal class Raid
 
     private const string sprout = "🌱";
     private const string crown = "👑";
+    private const int PingTimeFuture = 1800;
     private const ulong MentorRoleId = 1208606814770565131UL;
     private const ulong ModRoleId = 1208599020134600734UL;
     private const ulong SproutRoleId = 1208606685615099955UL;
@@ -138,6 +150,10 @@ internal class Raid
             Description = $"<t:{raidData.Time}:F>",
             Color = new Color(0xff1155)
         };
+        if (raidData.VoiceChannel != 0)
+        {
+            embed.Description += $"\nWill be in: {MentionUtils.MentionChannel(raidData.VoiceChannel)}";
+        }
 
         var playerList = raidData.Members.Where(m => !m.Helper).ToList();
         var players = string.Join("\n", RaidComp.FormatPlayerList(playerList, raidData.Comp));
@@ -149,13 +165,11 @@ internal class Raid
 
     private async Task SlashCommandExecuted(SocketSlashCommand command)
     {
-        if (command.CommandName != "raidcreate")
+        if (command.CommandName is not ("raidcreate" or "raidcreatelightparty"))
             return;
-        // TODO: Comp selection
-        var comp = new ContentComp(2, 2, 4);
-        // TODO: Voice channel linking
+        var comp = command.CommandName == "raidcreatelightparty" ? new ContentComp(1, 1, 2) : new ContentComp(2, 2, 4);
         var options = command.Data.Options.ToList();
-        if (options.Count != 2)
+        if (options.Count is not (2 or 3))
             return;
         var title = (string)options[0].Value;
         if (!DateTimeOffset.TryParse((string)options[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out var time))
@@ -175,10 +189,18 @@ internal class Raid
             return;
         }
         var timestamp = time.ToUnixTimeSeconds();
-        var raidData = new RaidData(title, timestamp, command.ChannelId ?? 0, comp, []);
+        var voiceChannel = options.Count > 2 ? (IChannel)options[2].Value : null;
+        if (voiceChannel is not null and not IVoiceChannel)
+        {
+            await command.RespondAsync("Raid channel location must be a voice channel", ephemeral: true);
+            return;
+        }
+        var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture < timestamp;
+        var raidData = new RaidData(title, hasPinged, timestamp, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new AllowedMentions(AllowedMentionTypes.None), components: BuildMessageComponents(), embed: BuildEmbed(raidData));
         Raids.Data.Add(message.Id, raidData);
+        CleanSaveRaids();
         await command.RespondAsync("Created", ephemeral: true);
     }
 
@@ -329,27 +351,29 @@ internal class Raid
 
     private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
     {
+        // TODO: This event doesn't seem to be called
         Raids.Data.Remove(message.Id);
         CleanSaveRaids();
         return Task.CompletedTask;
     }
 
-    // TODO: Drops raid pings when bot is offline
-    private long oldTickUpdate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private async Task TickUpdate(int o, int n)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var changed = false;
         foreach (var (_, raid) in Raids.Data)
         {
-            const int future = 1800;
-            if (raid.Members.Count > 0 && now < raid.Time && oldTickUpdate + future < raid.Time && raid.Time <= now + future)
+            if (!raid.hasPinged && now < raid.Time && raid.Time <= now + PingTimeFuture)
             {
-                if (await client.GetChannelAsync(raid.Channel) is IMessageChannel ch)
+                raid.hasPinged = true;
+                changed = true;
+                if (raid.Members.Count > 0 && await client.GetChannelAsync(raid.Channel) is IMessageChannel ch)
                 {
                     await ch.SendMessageAsync(PingText(raid));
                 }
             }
         }
-        oldTickUpdate = now;
+        if (changed)
+            CleanSaveRaids();
     }
 }
