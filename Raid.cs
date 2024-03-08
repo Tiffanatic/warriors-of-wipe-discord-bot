@@ -4,6 +4,40 @@ using System.Globalization;
 
 namespace WarriorsOfWipeBot;
 
+internal enum RoleType
+{
+    Tank,
+    Healer,
+    Dps,
+    AllRounder,
+}
+
+internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
+
+[Serializable]
+internal class RaidData(string title, long time, ulong channel, ContentComp comp, List<RaidDataMember> members)
+{
+    public string Title = title;
+    public long Time = time;
+    public ulong Channel = channel;
+    public ContentComp Comp = comp;
+    public List<RaidDataMember> Members = members;
+}
+
+[Serializable]
+internal class RaidDataMember(ulong userId, string job, bool helper, bool sprout, bool mentor)
+{
+    public ulong UserId = userId;
+    public string Job = job;
+    public bool Helper = helper;
+    public bool Sprout = sprout;
+    public bool Mentor = mentor;
+
+    [NonSerialized]
+    private Job? _jobData;
+    public Job? JobData => _jobData == null ? _jobData = Raid.JobFromId(Job) : _jobData;
+}
+
 internal class Raid
 {
     public static readonly SlashCommandProperties[] Commands =
@@ -16,24 +50,9 @@ internal class Raid
             .Build()
     ];
 
-    private enum RoleType
-    {
-        Tank,
-        Healer,
-        Dps,
-        AllRounder,
-    }
-
-    private record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
-
-    // warriors of wipe original:
-    // <:Tank:1211492267441922048>
-    // <:Healer:1211492332193579019>
-    // <:DPS:1211492203466068078>
-
-    private const string TankEmote = "<:Tank:1211492267441922048>";
-    private const string HealerEmote = "<:Healer:1211492332193579019>";
-    private const string DpsEmote = "<:DPS:1211492203466068078>";
+    public const string TankEmote = "<:Tank:1211492267441922048>";
+    public const string HealerEmote = "<:Healer:1211492332193579019>";
+    public const string DpsEmote = "<:DPS:1211492203466068078>";
     private static readonly Job[] Jobs =
     [
         new("PLD", "<:Paladin:1215315435382382663>", "Paladin", RoleType.Tank, 0),
@@ -74,22 +93,6 @@ internal class Raid
     private readonly DiscordSocketClient client;
     private readonly Json<Dictionary<ulong, RaidData>> Raids = new("raid.json");
     private readonly Json<Dictionary<ulong, string>> UserJobs = new("userjobs.json");
-    [Serializable]
-    private class RaidData(string title, long time, List<RaidDataMember> members)
-    {
-        public string Title = title;
-        public long Time = time;
-        public List<RaidDataMember> Members = members;
-    }
-    [Serializable]
-    private class RaidDataMember(ulong userId, string job, bool helper, bool sprout, bool mentor)
-    {
-        public ulong UserId = userId;
-        public string Job = job;
-        public bool Helper = helper;
-        public bool Sprout = sprout;
-        public bool Mentor = mentor;
-    }
 
     public Raid(DiscordSocketClient client)
     {
@@ -97,8 +100,7 @@ internal class Raid
         client.SlashCommandExecuted += SlashCommandExecuted;
         client.ButtonExecuted += ButtonExecuted;
         client.MessageDeleted += MessageDeleted;
-        // TODO
-        // client.LatencyUpdated += TickUpdate;
+        client.LatencyUpdated += TickUpdate;
     }
 
     private static MessageComponent BuildMessageComponents()
@@ -114,97 +116,18 @@ internal class Raid
         return components.Build();
     }
 
-    private static Job? JobFromId(string jobId)
+    public static Job? JobFromId(string jobId)
     {
         foreach (var j in Jobs)
-        {
             if (j.Id == jobId)
-            {
                 return j;
-            }
-        }
         return null;
     }
 
-    static string FormatMember(RaidDataMember raidDataMember)
+    public static string FormatMember(RaidDataMember raidDataMember)
     {
         var jobEmote = JobFromId(raidDataMember.Job)?.Emote ?? raidDataMember.Job;
         return $"{jobEmote} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{MentionUtils.MentionUser(raidDataMember.UserId)}";
-    }
-
-    private static IEnumerable<string> FormatPlayerList(IEnumerable<RaidDataMember> members)
-    {
-        int tanks = 0;
-        int healers = 0;
-        int dps = 0;
-        // todo: bad repetative code, newspaper bap
-        foreach (var member in members)
-        {
-            if (JobFromId(member.Job) is Job job)
-            {
-                switch (job.RoleType)
-                {
-                    case RoleType.Tank:
-                        tanks++;
-                        break;
-                    case RoleType.Healer:
-                        while (tanks < 2)
-                        {
-                            yield return TankEmote + " ---";
-                            tanks++;
-                        }
-                        healers++;
-                        break;
-                    case RoleType.Dps:
-                        while (tanks < 2)
-                        {
-                            yield return TankEmote + " ---";
-                            tanks++;
-                        }
-                        while (healers < 2)
-                        {
-                            yield return HealerEmote + " ---";
-                            healers++;
-                        }
-                        dps++;
-                        break;
-                    case RoleType.AllRounder:
-                        while (tanks < 2)
-                        {
-                            yield return TankEmote + " ---";
-                            tanks++;
-                        }
-                        while (healers < 2)
-                        {
-                            yield return HealerEmote + " ---";
-                            healers++;
-                        }
-                        while (dps < 4)
-                        {
-                            yield return DpsEmote + " ---";
-                            dps++;
-                        }
-                        break;
-                }
-            }
-
-            yield return FormatMember(member);
-        }
-        while (tanks < 2)
-        {
-            yield return TankEmote + " ---";
-            tanks++;
-        }
-        while (healers < 2)
-        {
-            yield return HealerEmote + " ---";
-            healers++;
-        }
-        while (dps < 4)
-        {
-            yield return DpsEmote + " ---";
-            dps++;
-        }
     }
 
     private static Embed BuildEmbed(RaidData raidData)
@@ -216,9 +139,10 @@ internal class Raid
             Color = new Color(0xff1155)
         };
 
-        var players = string.Join("\n", FormatPlayerList(raidData.Members.Where(m => !m.Helper)));
+        var playerList = raidData.Members.Where(m => !m.Helper).ToList();
+        var players = string.Join("\n", RaidComp.FormatPlayerList(playerList, raidData.Comp));
         var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMember));
-        embed.AddField("Confirmed raiders", string.IsNullOrWhiteSpace(players) ? "---" : players, true);
+        embed.AddField($"Confirmed raiders ({playerList.Count}/{raidData.Comp.Count})", string.IsNullOrWhiteSpace(players) ? "---" : players, true);
         embed.AddField("Helpers available", string.IsNullOrWhiteSpace(helpers) ? "---" : helpers, true);
         return embed.Build();
     }
@@ -227,6 +151,8 @@ internal class Raid
     {
         if (command.CommandName != "raidcreate")
             return;
+        // TODO: Comp selection
+        var comp = new ContentComp(2, 2, 4);
         // TODO: Voice channel linking
         var options = command.Data.Options.ToList();
         if (options.Count != 2)
@@ -249,7 +175,7 @@ internal class Raid
             return;
         }
         var timestamp = time.ToUnixTimeSeconds();
-        var raidData = new RaidData(title, timestamp, []);
+        var raidData = new RaidData(title, timestamp, command.ChannelId ?? 0, comp, []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new AllowedMentions(AllowedMentionTypes.None), components: BuildMessageComponents(), embed: BuildEmbed(raidData));
         Raids.Data.Add(message.Id, raidData);
@@ -266,7 +192,6 @@ internal class Raid
                 {
                     if (UserJobs.Data.TryGetValue(component.User.Id, out var job))
                     {
-                        raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
                         bool isMentor = false, isSprout = false;
                         if (component.User is IGuildUser guildUser)
                         {
@@ -276,10 +201,19 @@ internal class Raid
                                 isSprout |= role == SproutRoleId;
                             }
                         }
-                        // TODO: Cap members at 4/8
-                        raidData.Members.Add(new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor));
-                        CleanSaveRaids();
-                        await component.UpdateAsync(m => m.Embed = BuildEmbed(raidData));
+                        var raidDataMember = new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor);
+
+                        if (RaidComp.CanAddPlayer(raidData.Members, raidDataMember, raidData.Comp, component.User.Id))
+                        {
+                            raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
+                            raidData.Members.Add(raidDataMember);
+                            CleanSaveRaids();
+                            await component.UpdateAsync(m => m.Embed = BuildEmbed(raidData));
+                        }
+                        else
+                        {
+                            await component.RespondAsync($"There is no room in the party for a {raidDataMember.JobData?.Name}", ephemeral: true);
+                        }
                     }
                     else
                     {
@@ -320,10 +254,7 @@ internal class Raid
                         await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
                         return;
                     }
-                    var hasHelpers = raidData3.Members.Any(m => m.Helper);
-                    var players = string.Join(", ", raidData3.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-                    var helpers = string.Join(", ", raidData3.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-                    await component.RespondAsync($"Ping! {raidData3.Title}: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}", ephemeral: false);
+                    await component.RespondAsync($"Ping! {PingText(raidData3)}", ephemeral: false);
                 }
                 else
                 {
@@ -340,6 +271,14 @@ internal class Raid
                 await component.RespondAsync("Job selected! Sign up for raids now", ephemeral: true);
             }
         }
+    }
+
+    private string PingText(RaidData raidData)
+    {
+        var hasHelpers = raidData.Members.Any(m => m.Helper);
+        var players = string.Join(", ", raidData.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+        var helpers = string.Join(", ", raidData.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+        return $"{raidData.Title} starts <t:{raidData.Time}:R>: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}";
     }
 
     private void CleanSaveRaids()
@@ -395,16 +334,20 @@ internal class Raid
         return Task.CompletedTask;
     }
 
-    private long oldTickUpdate;
+    // TODO: Drops raid pings when bot is offline
+    private long oldTickUpdate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     private async Task TickUpdate(int o, int n)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         foreach (var (_, raid) in Raids.Data)
         {
             const int future = 1800;
-            if (now < raid.Time && oldTickUpdate + future < raid.Time && raid.Time <= now + future)
+            if (raid.Members.Count > 0 && now < raid.Time && oldTickUpdate + future < raid.Time && raid.Time <= now + future)
             {
-                // TODO: Send ping message
+                if (await client.GetChannelAsync(raid.Channel) is IMessageChannel ch)
+                {
+                    await ch.SendMessageAsync(PingText(raid));
+                }
             }
         }
         oldTickUpdate = now;
