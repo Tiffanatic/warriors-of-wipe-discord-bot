@@ -55,7 +55,7 @@ internal class RaidComp
         }
         if (!full)
             for (int i = count.Tanks; i < contentComp.Tanks; i++)
-                yield return Raid.TankEmote + " ---";
+                yield return Raid.TankEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count && members[memberIndex].JobData?.RoleType == RoleType.Healer)
         {
@@ -64,7 +64,7 @@ internal class RaidComp
         }
         if (!full)
             for (int i = count.Healers; i < contentComp.Healers; i++)
-                yield return Raid.HealerEmote + " ---";
+                yield return Raid.HealerEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count && members[memberIndex].JobData?.RoleType == RoleType.Dps)
         {
@@ -73,7 +73,7 @@ internal class RaidComp
         }
         if (!full)
             for (int i = count.Dps; i < contentComp.Dps; i++)
-                yield return Raid.DpsEmote + " ---";
+                yield return Raid.DpsEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count)
         {

@@ -49,7 +49,7 @@ internal class Raid
             .WithDescription("Create a 8-person raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
-            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
+            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in (start typing to filter channels)", isRequired: false)
             .Build(),
 
         new SlashCommandBuilder()
@@ -57,10 +57,11 @@ internal class Raid
             .WithDescription("Create a raid for light party (4 person) content")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
-            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
+            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in (start typing to filter channels)", isRequired: false)
             .Build()
     ];
 
+    public const string PlaceholderDash = "⸺";
     public const string TankEmote = "<:Tank:1211492267441922048>";
     public const string HealerEmote = "<:Healer:1211492332193579019>";
     public const string DpsEmote = "<:DPS:1211492203466068078>";
@@ -122,7 +123,7 @@ internal class Raid
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("signup").WithStyle(ButtonStyle.Secondary).WithLabel("Sign up").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("helpout").WithStyle(ButtonStyle.Secondary).WithLabel("Available as helper").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("withdraw").WithStyle(ButtonStyle.Secondary).WithLabel("Withdraw").Build());
-        rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("resetclass").WithStyle(ButtonStyle.Secondary).WithLabel("Reset class").Build());
+        rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("resetclass").WithStyle(ButtonStyle.Secondary).WithLabel("Choose class").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("ping").WithStyle(ButtonStyle.Secondary).WithLabel("Ping").Build());
         components.AddRow(rowBuilder);
         return components.Build();
@@ -162,8 +163,8 @@ internal class Raid
         var playerList = raidData.Members.Where(m => !m.Helper).ToList();
         var players = string.Join("\n", RaidComp.FormatPlayerList(playerList, raidData.Comp));
         var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMember));
-        embed.AddField($"Confirmed raiders ({playerList.Count}/{raidData.Comp.Count})", string.IsNullOrWhiteSpace(players) ? "---" : players, true);
-        embed.AddField("Helpers available", string.IsNullOrWhiteSpace(helpers) ? "---" : helpers, true);
+        embed.AddField($"Confirmed raiders ({playerList.Count}/{raidData.Comp.Count})", string.IsNullOrWhiteSpace(players) ? PlaceholderDash : players, true);
+        embed.AddField("Helpers available", string.IsNullOrWhiteSpace(helpers) ? PlaceholderDash : helpers, true);
         return embed.Build();
     }
 
@@ -199,7 +200,7 @@ internal class Raid
             await command.RespondAsync("Raid channel location must be a voice channel", ephemeral: true);
             return;
         }
-        var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture < timestamp;
+        var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture > timestamp;
         var raidData = new RaidData(title, hasPinged, timestamp, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new AllowedMentions(AllowedMentionTypes.None), components: BuildMessageComponents(), embed: BuildEmbed(raidData));
@@ -243,7 +244,7 @@ internal class Raid
                     }
                     else
                     {
-                        await SelectClassFollowup(component);
+                        await SelectClassFollowup(component, "You don't have a job selected - first, select your job, then try again");
                     }
                 }
                 else
@@ -266,7 +267,7 @@ internal class Raid
             case "resetclass":
                 var ok = UserJobs.Data.Remove(component.User.Id);
                 UserJobs.Save();
-                await component.RespondAsync(ok ? "Class reset!" : "You already don't have a class selected", ephemeral: true);
+                await SelectClassFollowup(component, "Choose your class");
                 break;
             case "ping":
                 if (component.User is IGuildUser user && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
@@ -341,7 +342,7 @@ internal class Raid
         Raids.Save();
     }
 
-    private static async Task SelectClassFollowup(SocketMessageComponent component)
+    private static async Task SelectClassFollowup(SocketMessageComponent component, string message)
     {
         var builder = new ComponentBuilder();
 
@@ -350,7 +351,7 @@ internal class Raid
             var job = Jobs[i];
             builder.WithButton(job.Name, job.Id, ButtonStyle.Secondary, Emote.Parse(job.Emote), row: job.Row);
         }
-        await component.RespondAsync("You don't have a job selected - first, select your job, then try again", ephemeral: true, components: builder.Build());
+        await component.RespondAsync(message, ephemeral: true, components: builder.Build());
     }
 
     private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
@@ -365,7 +366,7 @@ internal class Raid
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var changed = false;
-        foreach (var (_, raid) in Raids.Data)
+        foreach (var (message, raid) in Raids.Data)
         {
             if (!raid.hasPinged && now < raid.Time && raid.Time <= now + PingTimeFuture)
             {
@@ -373,7 +374,21 @@ internal class Raid
                 changed = true;
                 if (raid.Members.Count > 0 && await client.GetChannelAsync(raid.Channel) is IMessageChannel ch)
                 {
-                    await ch.SendMessageAsync(PingText(raid));
+                    // Don't send ping if the raid signup form has been deleted
+                    var msg = ch.GetMessageAsync(message);
+                    // TODO: Some debugging to make sure this works
+                    if (msg == null)
+                    {
+                        Console.WriteLine("Raid ping: message is null");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Raid ping: Was able to retrieve message");
+                    }
+                    if (msg is not null)
+                    {
+                        await ch.SendMessageAsync(PingText(raid));
+                    }
                 }
             }
         }
