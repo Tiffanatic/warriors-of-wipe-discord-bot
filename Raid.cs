@@ -49,7 +49,7 @@ internal class Raid
             .WithDescription("Create a 8-person raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
-            .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
+            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
             .Build(),
 
         new SlashCommandBuilder()
@@ -57,7 +57,7 @@ internal class Raid
             .WithDescription("Create a raid for light party (4 person) content")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
-            .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
+            .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
             .Build()
     ];
 
@@ -152,7 +152,11 @@ internal class Raid
         };
         if (raidData.VoiceChannel != 0)
         {
-            embed.Description += $"\nWill be in: {MentionUtils.MentionChannel(raidData.VoiceChannel)}";
+            embed.Description += $"\nWill be in {MentionUtils.MentionChannel(raidData.VoiceChannel)} <t:{raidData.Time}:R>";
+        }
+        else
+        {
+            embed.Description += $"\n<t:{raidData.Time}:R>";
         }
 
         var playerList = raidData.Members.Where(m => !m.Helper).ToList();
