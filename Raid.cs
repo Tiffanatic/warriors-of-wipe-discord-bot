@@ -48,7 +48,7 @@ internal class Raid
             .WithName("raidcreate")
             .WithDescription("Create a 8-person raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
-            .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone (defaults to ST)", isRequired: true)
+            .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
             .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
             .Build(),
 
@@ -56,7 +56,7 @@ internal class Raid
             .WithName("raidcreatelightparty")
             .WithDescription("Create a raid for light party (4 person) content")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
-            .AddOption("time", ApplicationCommandOptionType.String, "Time: yyyy-MM-dd hh:mm timezone (defaults to ST)", isRequired: true)
+            .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
             .AddOption("channel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in", isRequired: false)
             .Build()
     ];
