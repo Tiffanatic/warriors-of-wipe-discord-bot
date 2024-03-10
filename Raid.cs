@@ -269,7 +269,7 @@ internal partial class Raid
                 {
                     if (UserJobs.Data.TryGetValue(component.User.Id, out var job))
                     {
-                        (bool isMentor, bool isSprout) = IsMentorSprout(component.User);
+                        (bool isSprout, bool isMentor) = IsMentorSprout(component.User);
                         var raidDataMember = new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor);
 
                         if (RaidComp.CanAddPlayer(raidData.Members, raidDataMember, raidData.Comp, component.User.Id))
@@ -487,7 +487,7 @@ internal partial class Raid
                     await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
                     return;
                 }
-                (bool isMentor, bool isSprout) = IsMentorSprout(user);
+                (bool isSprout, bool isMentor) = IsMentorSprout(user);
                 var raidDataMember = new RaidDataMember(user.Id, job.Value.Id, option.Name == "helper", isSprout, isMentor);
 
                 if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id))
