@@ -323,7 +323,7 @@ internal partial class Raid
                         await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
                         return;
                     }
-                    await component.RespondAsync($"Ping! {PingText(raidData3)}", ephemeral: false);
+                    await component.RespondAsync($"Ping from {component.User.Mention}! {PingText(raidData3)}", ephemeral: false);
                 }
                 else
                 {
