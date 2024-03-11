@@ -1,6 +1,7 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using System.Globalization;
+using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
 
 namespace WarriorsOfWipeBot;
@@ -16,11 +17,13 @@ internal enum RoleType
 internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
 
 [Serializable]
-internal class RaidData(string title, bool hasPinged, long time, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
+internal class RaidData(string title, bool hasPinged, long time, ulong creator, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
 {
     public string Title = title;
     public bool hasPinged = hasPinged;
     public long Time = time;
+    [OptionalField]
+    public ulong Creator = creator;
     public ulong Channel = channel;
     public ulong VoiceChannel = voiceChannel;
     public ContentComp Comp = comp;
@@ -48,7 +51,7 @@ internal partial class Raid
         new SlashCommandBuilder()
             .WithName("raidcreate")
             .WithDescription("Create a 8-person raid")
-            .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
+            .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create (which fight, prog point, etc.)", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
             .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in (start typing to filter channels)", isRequired: false)
             .Build(),
@@ -56,7 +59,7 @@ internal partial class Raid
         new SlashCommandBuilder()
             .WithName("raidcreatelightparty")
             .WithDescription("Create a raid for light party (4 person) content")
-            .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create", isRequired: true)
+            .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create (which fight, prog point, etc.)", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
             .AddOption("voicechannel", ApplicationCommandOptionType.Channel, "Voice channel the raid will be in (start typing to filter channels)", isRequired: false)
             .Build(),
@@ -88,6 +91,12 @@ internal partial class Raid
                 .WithType(ApplicationCommandOptionType.SubCommand)
                 .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
                 .AddOption("user", ApplicationCommandOptionType.User, "The user to withdraw", isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("whomadethis")
+                .WithDescription("Shows who made a raid")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
             .Build(),
     ];
@@ -237,7 +246,7 @@ internal partial class Raid
             return;
         }
         var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture > timestamp;
-        var raidData = new RaidData(title, hasPinged, timestamp, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
+        var raidData = new RaidData(title, hasPinged, timestamp, command.User.Id, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new AllowedMentions(AllowedMentionTypes.None), components: BuildMessageComponents(), embed: BuildEmbed(raidData));
         Raids.Data.Add(message.Id, raidData);
@@ -245,7 +254,7 @@ internal partial class Raid
         await command.RespondAsync("Created", ephemeral: true);
     }
 
-    private (bool isSprout, bool isMentor) IsMentorSprout(IUser user)
+    private static (bool isSprout, bool isMentor) IsMentorSprout(IUser user)
     {
         bool isMentor = false, isSprout = false;
         if (user is IGuildUser guildUser)
@@ -342,7 +351,7 @@ internal partial class Raid
         }
     }
 
-    private string PingText(RaidData raidData)
+    private static string PingText(RaidData raidData)
     {
         var hasHelpers = raidData.Members.Any(m => m.Helper);
         var players = string.Join(", ", raidData.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
@@ -445,67 +454,109 @@ internal partial class Raid
     {
         var option = command.Data.Options.Single();
         var options = option.Options.ToArray();
-        var raidId = (string)options[0];
-        var user = (IUser)options[1].Value;
-        var match = ChannelRegex().Match(raidId);
-        if (!match.Success)
+        async Task<RaidData?> GetRaidData(int argument)
         {
-            await command.RespondAsync("Invalid raid, use \"Copy Message Link\" or \"Copy Message ID\" and paste it in the raid field", ephemeral: true);
-            return;
+            var raidId = (string)options[argument];
+            var match = ChannelRegex().Match(raidId);
+            if (!match.Success)
+            {
+                await command.RespondAsync("Invalid raid, use \"Copy Message Link\" or \"Copy Message ID\" and paste it in the raid field", ephemeral: true);
+                return null;
+            }
+            if (!ulong.TryParse(match.Groups["message"].Value, out var messageId) || !Raids.Data.TryGetValue(messageId, out var raid))
+            {
+                await command.RespondAsync("Couldn't find raid with id " + messageId, ephemeral: true);
+                return null;
+            }
+            return raid;
         }
-        if (!ulong.TryParse(match.Groups["message"].Value, out var messageId) || !Raids.Data.TryGetValue(messageId, out var raid))
+        async Task<(IUserMessage messageData, RaidData raid)?> GetRaid(int argument)
         {
-            await command.RespondAsync("Couldn't find raid with id " + messageId, ephemeral: true);
-            return;
+            var raidId = (string)options[argument];
+            var match = ChannelRegex().Match(raidId);
+            if (!match.Success)
+            {
+                await command.RespondAsync("Invalid raid, use \"Copy Message Link\" or \"Copy Message ID\" and paste it in the raid field", ephemeral: true);
+                return null;
+            }
+            if (!ulong.TryParse(match.Groups["message"].Value, out var messageId) || !Raids.Data.TryGetValue(messageId, out var raid))
+            {
+                await command.RespondAsync("Couldn't find raid with id " + messageId, ephemeral: true);
+                return null;
+            }
+            if (await client.GetChannelAsync(raid.Channel) is not IMessageChannel ch)
+            {
+                await command.RespondAsync("Unable to fetch channel", ephemeral: true);
+                return null;
+            }
+            var messageDataRaw = await ch.GetMessageAsync(messageId);
+            if (messageDataRaw == null || messageDataRaw is not IUserMessage messageData)
+            {
+                await command.RespondAsync("Unable to fetch message", ephemeral: true);
+                return null;
+            }
+            return (messageData, raid);
         }
-        if (await client.GetChannelAsync(raid.Channel) is not IMessageChannel ch)
-        {
-            await command.RespondAsync("Unable to fetch channel", ephemeral: true);
-            return;
-        }
-        var messageDataRaw = await ch.GetMessageAsync(messageId);
-        if (messageDataRaw == null || messageDataRaw is not IUserMessage messageData)
-        {
-            await command.RespondAsync("Unable to fetch message", ephemeral: true);
-            return;
-        }
+
         switch (option.Name)
         {
             case "signup":
             case "helper":
-                Job? JobFromIdOrName(string jobId)
                 {
-                    foreach (var j in Jobs)
-                        if (j.Id.Equals(jobId, StringComparison.InvariantCultureIgnoreCase) || j.Name.Equals(jobId, StringComparison.InvariantCultureIgnoreCase))
-                            return j;
-                    return null;
-                }
-                var jobText = (string)options[2].Value;
-                var job = JobFromIdOrName(jobText);
-                if (job == null)
-                {
-                    await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
-                    return;
-                }
-                (bool isSprout, bool isMentor) = IsMentorSprout(user);
-                var raidDataMember = new RaidDataMember(user.Id, job.Value.Id, option.Name == "helper", isSprout, isMentor);
+                    static Job? JobFromIdOrName(string jobId)
+                    {
+                        foreach (var j in Jobs)
+                            if (j.Id.Equals(jobId, StringComparison.InvariantCultureIgnoreCase) || j.Name.Equals(jobId, StringComparison.InvariantCultureIgnoreCase))
+                                return j;
+                        return null;
+                    }
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    (var messageData, var raid) = raidResult.Value;
+                    var user = (IUser)options[1].Value;
+                    var jobText = (string)options[2].Value;
+                    var job = JobFromIdOrName(jobText);
+                    if (job == null)
+                    {
+                        await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
+                        return;
+                    }
+                    (bool isSprout, bool isMentor) = IsMentorSprout(user);
+                    var raidDataMember = new RaidDataMember(user.Id, job.Value.Id, option.Name == "helper", isSprout, isMentor);
 
-                if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id))
-                {
-                    await command.RespondAsync($"There is no room in the party for a {raidDataMember.JobData?.Name}", ephemeral: true);
-                    return;
+                    if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id))
+                    {
+                        await command.RespondAsync($"There is no room in the party for a {raidDataMember.JobData?.Name}", ephemeral: true);
+                        return;
+                    }
+                    raid.Members.RemoveAll(m => m.UserId == user.Id);
+                    raid.Members.Add(raidDataMember);
+                    CleanSaveRaids();
+                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}", ephemeral: true);
+                    break;
                 }
-                raid.Members.RemoveAll(m => m.UserId == user.Id);
-                raid.Members.Add(raidDataMember);
-                CleanSaveRaids();
-                await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
-                await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}", ephemeral: true);
-                break;
             case "withdraw":
-                raid.Members.RemoveAll(m => m.UserId == user.Id);
-                CleanSaveRaids();
-                await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
-                await command.RespondAsync($"{user.Mention} removed from {raid.Title}", ephemeral: true);
+                {
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    (var messageData, var raid) = raidResult.Value;
+                    var user = (IUser)options[1].Value;
+                    raid.Members.RemoveAll(m => m.UserId == user.Id);
+                    CleanSaveRaids();
+                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await command.RespondAsync($"{user.Mention} removed from {raid.Title}", ephemeral: true);
+                    break;
+                }
+            case "whomadethis":
+                {
+                    var raid = await GetRaidData(0);
+                    if (raid == null)
+                        return;
+                    await command.RespondAsync($"{MentionUtils.MentionUser(raid.Creator)}", ephemeral: true);
+                }
                 break;
         }
     }
