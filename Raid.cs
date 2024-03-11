@@ -152,7 +152,7 @@ internal partial class Raid
         var components = new ComponentBuilder();
         ActionRowBuilder rowBuilder = new();
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("signup").WithStyle(ButtonStyle.Secondary).WithLabel("Sign up").Build());
-        rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("helpout").WithStyle(ButtonStyle.Secondary).WithLabel("Available as helper").Build());
+        rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("helpout").WithStyle(ButtonStyle.Secondary).WithLabel("Available to help").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("withdraw").WithStyle(ButtonStyle.Secondary).WithLabel("Withdraw").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("resetclass").WithStyle(ButtonStyle.Secondary).WithLabel("Choose class").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("ping").WithStyle(ButtonStyle.Secondary).WithLabel("Ping").Build());
@@ -195,7 +195,7 @@ internal partial class Raid
         var players = string.Join("\n", RaidComp.FormatPlayerList(playerList, raidData.Comp));
         var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMember));
         embed.AddField($"Confirmed raiders ({playerList.Count}/{raidData.Comp.Count})", string.IsNullOrWhiteSpace(players) ? PlaceholderDash : players, true);
-        embed.AddField("Helpers available", string.IsNullOrWhiteSpace(helpers) ? PlaceholderDash : helpers, true);
+        embed.AddField("Available if needed", string.IsNullOrWhiteSpace(helpers) ? PlaceholderDash : helpers, true);
         return embed.Build();
     }
 
