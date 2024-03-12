@@ -49,7 +49,7 @@ internal partial class Raid
     public static readonly SlashCommandProperties[] Commands =
     [
         new SlashCommandBuilder()
-            .WithName("raidcreate")
+            .WithName("raid")
             .WithDescription("Create a 8-person raid")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create (which fight, prog point, etc.)", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
@@ -57,7 +57,7 @@ internal partial class Raid
             .Build(),
 
         new SlashCommandBuilder()
-            .WithName("raidcreatelightparty")
+            .WithName("raidlightparty")
             .WithDescription("Create a raid for light party (4 person) content")
             .AddOption("raid", ApplicationCommandOptionType.String, "The name of the raid to create (which fight, prog point, etc.)", isRequired: true)
             .AddOption("time", ApplicationCommandOptionType.String, "Time (in server time): yyyy-MM-dd hh:mm", isRequired: true)
@@ -215,9 +215,9 @@ internal partial class Raid
             await WipeBotAdmin(command);
             return;
         }
-        if (command.CommandName is not ("raidcreate" or "raidcreatelightparty"))
+        if (command.CommandName is not ("raid" or "raidlightparty"))
             return;
-        var comp = command.CommandName == "raidcreatelightparty" ? new ContentComp(1, 1, 2) : new ContentComp(2, 2, 4);
+        var comp = command.CommandName == "raidlightparty" ? new ContentComp(1, 1, 2) : new ContentComp(2, 2, 4);
         var options = command.Data.Options.ToList();
         if (options.Count is not (2 or 3))
             return;
