@@ -98,6 +98,20 @@ internal partial class Raid
                 .WithType(ApplicationCommandOptionType.SubCommand)
                 .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("changetitle")
+                .WithDescription("Changes the title of a raid")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
+                .AddOption("title", ApplicationCommandOptionType.String, "The new title", isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("changetime")
+                .WithDescription("Changes the time of a raid")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
+                .AddOption("time", ApplicationCommandOptionType.String, "The new time in server time", isRequired: true)
+            )
             .Build(),
     ];
 
@@ -208,6 +222,28 @@ internal partial class Raid
         return embed.Build();
     }
 
+    private static bool TryParseTime(string input, out DateTimeOffset time, out string message)
+    {
+        if (!DateTimeOffset.TryParse(input, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out time))
+        {
+            message = "Invalid time format";
+            return false;
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (time < now)
+        {
+            message = "Cannot make a raid in the past";
+            return false;
+        }
+        if (time > now.AddDays(7))
+        {
+            message = "Cannot make a raid more than a week from now";
+            return false;
+        }
+        message = "";
+        return true;
+    }
+
     private async Task SlashCommandExecuted(SocketSlashCommand command)
     {
         if (command.CommandName is "wipebotadmin")
@@ -222,20 +258,9 @@ internal partial class Raid
         if (options.Count is not (2 or 3))
             return;
         var title = (string)options[0].Value;
-        if (!DateTimeOffset.TryParse((string)options[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out var time))
+        if (!TryParseTime((string)options[1].Value, out var time, out var timeErrorMessage))
         {
-            await command.RespondAsync("Invalid time format", ephemeral: true);
-            return;
-        }
-        var now = DateTimeOffset.UtcNow;
-        if (time < now)
-        {
-            await command.RespondAsync("Cannot make a raid in the past", ephemeral: true);
-            return;
-        }
-        if (time > now.AddDays(7))
-        {
-            await command.RespondAsync("Cannot make a raid more than a week from now", ephemeral: true);
+            await command.RespondAsync(timeErrorMessage, ephemeral: true);
             return;
         }
         var timestamp = time.ToUnixTimeSeconds();
@@ -556,6 +581,36 @@ internal partial class Raid
                     if (raid == null)
                         return;
                     await command.RespondAsync($"{MentionUtils.MentionUser(raid.Creator)}", ephemeral: true);
+                }
+                break;
+            case "changetitle":
+                {
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    (var messageData, var raid) = raidResult.Value;
+                    var title = (string)options[1].Value;
+                    raid.Title = title;
+                    CleanSaveRaids();
+                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await command.RespondAsync($"Title changed to " + title, ephemeral: true);
+                }
+                break;
+            case "changetime":
+                {
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    (var messageData, var raid) = raidResult.Value;
+                    if (!TryParseTime((string)options[1].Value, out var time, out var timeErrorMessage))
+                    {
+                        await command.RespondAsync(timeErrorMessage, ephemeral: true);
+                        return;
+                    }
+                    raid.Time = time.ToUnixTimeSeconds();
+                    CleanSaveRaids();
+                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await command.RespondAsync($"Time changed to <t:{raid.Time}:F>", ephemeral: true);
                 }
                 break;
         }
