@@ -17,10 +17,12 @@ internal enum RoleType
 internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
 
 [Serializable]
-internal class RaidData(string title, bool hasPinged, long time, ulong creator, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
+internal class RaidData(string title, bool hasPinged, bool hasStarted, long time, ulong creator, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
 {
     public string Title = title;
     public bool hasPinged = hasPinged;
+    [OptionalField]
+    public bool hasStarted = hasStarted;
     public long Time = time;
     [OptionalField]
     public ulong Creator = creator;
@@ -212,11 +214,12 @@ internal partial class Raid
 
     private static Embed BuildEmbed(RaidData raidData)
     {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         EmbedBuilder embed = new()
         {
             Title = raidData.Title,
             Description = $"<t:{raidData.Time}:F>",
-            Color = new Color(0xff1155)
+            Color = now < raidData.Time ? new Color(0x11ffaa) : new Color(0xff1155)
         };
         if (raidData.VoiceChannel != 0)
         {
@@ -284,7 +287,7 @@ internal partial class Raid
             return;
         }
         var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture > timestamp;
-        var raidData = new RaidData(title, hasPinged, timestamp, command.User.Id, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
+        var raidData = new RaidData(title, hasPinged, false, timestamp, command.User.Id, command.ChannelId ?? 0, voiceChannel?.Id ?? 0, comp, []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new AllowedMentions(AllowedMentionTypes.None), components: BuildMessageComponents(), embed: BuildEmbed(raidData));
         Raids.Data.Add(message.Id, raidData);
@@ -559,16 +562,30 @@ internal partial class Raid
                     // TODO: Some debugging to make sure this works
                     if (msg is null)
                     {
-                        Console.WriteLine("Raid ping: message is null");
+                        Console.WriteLine("Raid ping: message is null for " + raid.Title);
                     }
                     else
                     {
-                        Console.WriteLine("Raid ping: Was able to retrieve message");
+                        Console.WriteLine("Raid ping: Was able to retrieve message for " + raid.Title);
                     }
                     if (msg is not null)
                     {
                         await ch.SendMessageAsync(PingText(raid));
                     }
+                }
+            }
+            if (!raid.hasStarted && now > raid.Time)
+            {
+                Console.WriteLine("Starting raid (for color) " + raid.Title);
+                raid.hasStarted = true;
+                changed = true;
+                if (await client.GetChannelAsync(raid.Channel) is IMessageChannel ch && await ch.GetMessageAsync(message) is IUserMessage msg)
+                {
+                    await msg.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
                 }
             }
         }
