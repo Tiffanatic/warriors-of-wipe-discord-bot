@@ -154,6 +154,7 @@ internal partial class Raid
     private const string sprout = "🌱";
     private const string crown = "👑";
     private const int PingTimeFuture = 1800;
+    private const ulong WarriorsOfWipeGuildId = 1208569487964643418UL;
     private const ulong MentorRoleId = 1208606814770565131UL;
     private const ulong ModRoleId = 1208599020134600734UL;
     private const ulong SproutRoleId = 1208606685615099955UL;
@@ -166,6 +167,7 @@ internal partial class Raid
         this.client = client;
         client.SlashCommandExecuted += SlashCommandExecuted;
         client.ButtonExecuted += ButtonExecuted;
+        client.ModalSubmitted += ModalSubmitted;
         client.MessageDeleted += MessageDeleted;
         client.LatencyUpdated += TickUpdate;
     }
@@ -346,7 +348,7 @@ internal partial class Raid
                 await SelectClassFollowup(component, "Choose your class");
                 break;
             case "ping":
-                if (component.User is IGuildUser user && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
+                if (component.User is IGuildUser user && component.GuildId == WarriorsOfWipeGuildId && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
                 {
                     await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
                 }
@@ -357,7 +359,7 @@ internal partial class Raid
                         await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
                         return;
                     }
-                    await component.RespondAsync($"Ping from {component.User.Mention}! {PingText(raidData3)}", ephemeral: false);
+                    await PingModal(component, component.Message.Id);
                 }
                 else
                 {
@@ -373,6 +375,37 @@ internal partial class Raid
                 UserJobs.Save();
                 await component.RespondAsync("Job selected! Sign up for raids now", ephemeral: true);
             }
+        }
+    }
+
+    private static async Task PingModal(SocketMessageComponent component, ulong raidId)
+    {
+        var modalBuilder = new ModalBuilder("Enter ping text", "ping");
+        modalBuilder.AddTextInput("Ping text", raidId.ToString(), TextInputStyle.Short, required: false);
+        await component.RespondWithModalAsync(modalBuilder.Build());
+    }
+
+    private async Task PingModalSubmitted(SocketModal modal)
+    {
+        var textInput = modal.Data.Components.Single();
+        var id = ulong.Parse(textInput.CustomId);
+        if (Raids.Data.TryGetValue(id, out var raidData))
+        {
+            await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData)}", ephemeral: false);
+        }
+        else
+        {
+            await modal.RespondAsync("Raid not found", ephemeral: true);
+        }
+    }
+
+    private async Task ModalSubmitted(SocketModal modal)
+    {
+        switch (modal.Data.CustomId)
+        {
+            case "ping":
+                await PingModalSubmitted(modal);
+                break;
         }
     }
 
@@ -451,9 +484,9 @@ internal partial class Raid
                 if (raid.Members.Count > 0 && await client.GetChannelAsync(raid.Channel) is IMessageChannel ch)
                 {
                     // Don't send ping if the raid signup form has been deleted
-                    var msg = ch.GetMessageAsync(message);
+                    var msg = await ch.GetMessageAsync(message);
                     // TODO: Some debugging to make sure this works
-                    if (msg == null)
+                    if (msg is null)
                     {
                         Console.WriteLine("Raid ping: message is null");
                     }
