@@ -193,7 +193,6 @@ internal partial class Raid
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("helpout").WithStyle(ButtonStyle.Secondary).WithLabel("Available to help").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("withdraw").WithStyle(ButtonStyle.Secondary).WithLabel("Withdraw").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("resetclass").WithStyle(ButtonStyle.Secondary).WithLabel("Choose class").Build());
-        // rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("ping").WithStyle(ButtonStyle.Secondary).WithLabel("Ping").Build());
         components.AddRow(rowBuilder);
         return components.Build();
     }
@@ -369,28 +368,6 @@ internal partial class Raid
                 UserJobs.Save();
                 await SelectClassFollowup(component, "Choose your class");
                 break;
-            // TODO: Delete ping once there are no more raids with this component
-            case "ping":
-                if (component.User is IGuildUser user && component.GuildId == WarriorsOfWipeGuildId && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
-                {
-                    await component.RespondAsync("Only mentors can ping events!", ephemeral: true);
-                }
-                else if (Raids.Data.TryGetValue(component.Message.Id, out var raidData3))
-                {
-                    if (raidData3.Members.Count == 0)
-                    {
-                        await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
-                        return;
-                    }
-                    var modalBuilder = new ModalBuilder("Enter ping text", "ping");
-                    modalBuilder.AddTextInput("Ping text", component.Message.Id.ToString(), TextInputStyle.Short, required: false);
-                    await component.RespondWithModalAsync(modalBuilder.Build());
-                }
-                else
-                {
-                    await component.RespondAsync("Error: couldn't find raid data", ephemeral: true);
-                }
-                break;
         }
         foreach (var job in Jobs)
         {
@@ -401,38 +378,6 @@ internal partial class Raid
                 await component.RespondAsync("Job selected! Sign up for raids now", ephemeral: true);
             }
         }
-    }
-
-    private async Task PingModalSubmitted(SocketModal modal)
-    {
-        var textInput = modal.Data.Components.Single();
-        var id = ulong.Parse(textInput.CustomId);
-        if (Raids.Data.TryGetValue(id, out var raidData))
-        {
-            await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData)}", ephemeral: false);
-        }
-        else
-        {
-            await modal.RespondAsync("Raid not found", ephemeral: true);
-        }
-    }
-
-    private async Task ModalSubmitted(SocketModal modal)
-    {
-        switch (modal.Data.CustomId)
-        {
-            case "ping":
-                await PingModalSubmitted(modal);
-                break;
-        }
-    }
-
-    private static string PingText(RaidData raidData)
-    {
-        var hasHelpers = raidData.Members.Any(m => m.Helper);
-        var players = string.Join(", ", raidData.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-        var helpers = string.Join(", ", raidData.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-        return $"{raidData.Title} starts <t:{raidData.Time}:R>: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}";
     }
 
     private void CleanSaveRaids()
@@ -494,6 +439,16 @@ internal partial class Raid
         }
     }
 
+    private async Task ModalSubmitted(SocketModal modal)
+    {
+        switch (modal.Data.CustomId)
+        {
+            case "ping":
+                await PingModalSubmitted(modal);
+                break;
+        }
+    }
+
     private async Task PingRaidMessageCommand(SocketMessageCommand command)
     {
         if (command.User is IGuildUser user && command.GuildId == WarriorsOfWipeGuildId && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
@@ -515,6 +470,28 @@ internal partial class Raid
         {
             await command.RespondAsync("Error: couldn't find raid data", ephemeral: true);
         }
+    }
+
+    private async Task PingModalSubmitted(SocketModal modal)
+    {
+        var textInput = modal.Data.Components.Single();
+        var id = ulong.Parse(textInput.CustomId);
+        if (Raids.Data.TryGetValue(id, out var raidData))
+        {
+            await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData)}", ephemeral: false);
+        }
+        else
+        {
+            await modal.RespondAsync("Raid not found", ephemeral: true);
+        }
+    }
+
+    private static string PingText(RaidData raidData)
+    {
+        var hasHelpers = raidData.Members.Any(m => m.Helper);
+        var players = string.Join(", ", raidData.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+        var helpers = string.Join(", ", raidData.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
+        return $"{raidData.Title} starts <t:{raidData.Time}:R>: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}";
     }
 
     private async Task DeleteRaidMessageCommand(SocketMessageCommand command)
