@@ -46,7 +46,7 @@ internal class RaidDataMember(ulong userId, string job, bool helper, bool sprout
 
 internal partial class Raid
 {
-    public static readonly SlashCommandProperties[] Commands =
+    public static readonly ApplicationCommandProperties[] Commands =
     [
         new SlashCommandBuilder()
             .WithName("raid")
@@ -113,8 +113,18 @@ internal partial class Raid
                 .AddOption("time", ApplicationCommandOptionType.String, "The new time in server time", isRequired: true)
             )
             .Build(),
+
+        new MessageCommandBuilder()
+            .WithName(PingRaidMessageCommandName)
+            .Build(),
+
+        new MessageCommandBuilder()
+            .WithName(DeleteRaidMessageCommandName)
+            .Build(),
     ];
 
+    public const string PingRaidMessageCommandName = "Ping /raid";
+    public const string DeleteRaidMessageCommandName = "Delete /raid created by you";
     public const string PlaceholderDash = "⸺";
     public const string TankEmote = "<:Tank:1211492267441922048>";
     public const string HealerEmote = "<:Healer:1211492332193579019>";
@@ -168,6 +178,7 @@ internal partial class Raid
         client.SlashCommandExecuted += SlashCommandExecuted;
         client.ButtonExecuted += ButtonExecuted;
         client.ModalSubmitted += ModalSubmitted;
+        client.MessageCommandExecuted += MessageCommandExecuted;
         client.MessageDeleted += MessageDeleted;
         client.LatencyUpdated += TickUpdate;
     }
@@ -180,7 +191,7 @@ internal partial class Raid
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("helpout").WithStyle(ButtonStyle.Secondary).WithLabel("Available to help").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("withdraw").WithStyle(ButtonStyle.Secondary).WithLabel("Withdraw").Build());
         rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("resetclass").WithStyle(ButtonStyle.Secondary).WithLabel("Choose class").Build());
-        rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("ping").WithStyle(ButtonStyle.Secondary).WithLabel("Ping").Build());
+        // rowBuilder.AddComponent(new ButtonBuilder().WithCustomId("ping").WithStyle(ButtonStyle.Secondary).WithLabel("Ping").Build());
         components.AddRow(rowBuilder);
         return components.Build();
     }
@@ -313,7 +324,11 @@ internal partial class Raid
                             raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
                             raidData.Members.Add(raidDataMember);
                             CleanSaveRaids();
-                            await component.UpdateAsync(m => m.Embed = BuildEmbed(raidData));
+                            await component.UpdateAsync(m =>
+                            {
+                                m.Embed = BuildEmbed(raidData);
+                                m.Components = BuildMessageComponents();
+                            });
                         }
                         else
                         {
@@ -335,7 +350,11 @@ internal partial class Raid
                 {
                     raidData2.Members.RemoveAll(m => m.UserId == component.User.Id);
                     CleanSaveRaids();
-                    await component.UpdateAsync(m => m.Embed = BuildEmbed(raidData2));
+                    await component.UpdateAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raidData2);
+                        m.Components = BuildMessageComponents();
+                    });
                 }
                 else
                 {
@@ -347,6 +366,7 @@ internal partial class Raid
                 UserJobs.Save();
                 await SelectClassFollowup(component, "Choose your class");
                 break;
+            // TODO: Delete ping once there are no more raids with this component
             case "ping":
                 if (component.User is IGuildUser user && component.GuildId == WarriorsOfWipeGuildId && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
                 {
@@ -359,7 +379,9 @@ internal partial class Raid
                         await component.RespondAsync("There's no one signed up to ping", ephemeral: true);
                         return;
                     }
-                    await PingModal(component, component.Message.Id);
+                    var modalBuilder = new ModalBuilder("Enter ping text", "ping");
+                    modalBuilder.AddTextInput("Ping text", component.Message.Id.ToString(), TextInputStyle.Short, required: false);
+                    await component.RespondWithModalAsync(modalBuilder.Build());
                 }
                 else
                 {
@@ -376,13 +398,6 @@ internal partial class Raid
                 await component.RespondAsync("Job selected! Sign up for raids now", ephemeral: true);
             }
         }
-    }
-
-    private static async Task PingModal(SocketMessageComponent component, ulong raidId)
-    {
-        var modalBuilder = new ModalBuilder("Enter ping text", "ping");
-        modalBuilder.AddTextInput("Ping text", raidId.ToString(), TextInputStyle.Short, required: false);
-        await component.RespondWithModalAsync(modalBuilder.Build());
     }
 
     private async Task PingModalSubmitted(SocketModal modal)
@@ -461,6 +476,62 @@ internal partial class Raid
             builder.WithButton(job.Name, job.Id, ButtonStyle.Secondary, Emote.Parse(job.Emote), row: job.Row);
         }
         await component.RespondAsync(message, ephemeral: true, components: builder.Build());
+    }
+
+    private async Task MessageCommandExecuted(SocketMessageCommand command)
+    {
+        switch (command.CommandName)
+        {
+            case PingRaidMessageCommandName:
+                await PingRaidMessageCommand(command);
+                break;
+            case DeleteRaidMessageCommandName:
+                await DeleteRaidMessageCommand(command);
+                break;
+        }
+    }
+
+    private async Task PingRaidMessageCommand(SocketMessageCommand command)
+    {
+        if (command.User is IGuildUser user && command.GuildId == WarriorsOfWipeGuildId && user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
+        {
+            await command.RespondAsync("Only mentors can ping events!", ephemeral: true);
+        }
+        else if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData3))
+        {
+            if (raidData3.Members.Count == 0)
+            {
+                await command.RespondAsync("There's no one signed up to ping", ephemeral: true);
+                return;
+            }
+            var modalBuilder = new ModalBuilder("Enter ping text", "ping");
+            modalBuilder.AddTextInput("Ping text", command.Data.Message.Id.ToString(), TextInputStyle.Short, required: false);
+            await command.RespondWithModalAsync(modalBuilder.Build());
+        }
+        else
+        {
+            await command.RespondAsync("Error: couldn't find raid data", ephemeral: true);
+        }
+    }
+
+    private async Task DeleteRaidMessageCommand(SocketMessageCommand command)
+    {
+        if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData))
+        {
+            if (command.User.Id == raidData.Creator)
+            {
+                await (await command.GetChannelAsync()).DeleteMessageAsync(command.Data.Message.Id);
+                await command.RespondAsync("Deleted", ephemeral: true);
+            }
+            else
+            {
+                await command.RespondAsync("You are not the creator of this raid", ephemeral: true);
+            }
+        }
+        else
+        {
+            await command.RespondAsync("This is not a raid signup form created with /raid", ephemeral: true);
+        }
     }
 
     private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
@@ -591,7 +662,11 @@ internal partial class Raid
                     raid.Members.RemoveAll(m => m.UserId == user.Id);
                     raid.Members.Add(raidDataMember);
                     CleanSaveRaids();
-                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await messageData.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
                     await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}", ephemeral: true);
                     break;
                 }
@@ -604,7 +679,11 @@ internal partial class Raid
                     var user = (IUser)options[1].Value;
                     raid.Members.RemoveAll(m => m.UserId == user.Id);
                     CleanSaveRaids();
-                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await messageData.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
                     await command.RespondAsync($"{user.Mention} removed from {raid.Title}", ephemeral: true);
                     break;
                 }
@@ -625,7 +704,11 @@ internal partial class Raid
                     var title = (string)options[1].Value;
                     raid.Title = title;
                     CleanSaveRaids();
-                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await messageData.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
                     await command.RespondAsync($"Title changed to " + title, ephemeral: true);
                 }
                 break;
@@ -642,7 +725,11 @@ internal partial class Raid
                     }
                     raid.Time = time.ToUnixTimeSeconds();
                     CleanSaveRaids();
-                    await messageData.ModifyAsync(m => m.Embed = BuildEmbed(raid));
+                    await messageData.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
                     await command.RespondAsync($"Time changed to <t:{raid.Time}:F>", ephemeral: true);
                 }
                 break;
