@@ -33,9 +33,11 @@ internal class RaidData(string title, bool hasPinged, bool hasStarted, long time
 }
 
 [Serializable]
-internal class RaidDataMember(ulong userId, string job, bool helper, bool sprout, bool mentor)
+internal class RaidDataMember(ulong userId, string nick, string job, bool helper, bool sprout, bool mentor)
 {
     public ulong UserId = userId;
+    [OptionalField]
+    public string Nick = nick;
     public string Job = job;
     public bool Helper = helper;
     public bool Sprout = sprout;
@@ -208,8 +210,12 @@ internal partial class Raid
     public static string FormatMember(RaidDataMember raidDataMember)
     {
         var jobEmote = JobFromId(raidDataMember.Job)?.Emote ?? raidDataMember.Job;
-        return $"{jobEmote} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{MentionUtils.MentionUser(raidDataMember.UserId)}";
+        var name = string.IsNullOrEmpty(raidDataMember.Nick) ? MentionUtils.MentionUser(raidDataMember.UserId) : raidDataMember.Nick;
+        return $"{jobEmote} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{name}";
     }
+
+    public static string GetNick(IUser user) =>
+        user is IGuildUser g ? g.DisplayName : user.GlobalName ?? user.Username;
 
     private static Embed BuildEmbed(RaidData raidData)
     {
@@ -319,7 +325,7 @@ internal partial class Raid
                     if (UserJobs.Data.TryGetValue(component.User.Id, out var job))
                     {
                         (bool isSprout, bool isMentor) = IsMentorSprout(component.User);
-                        var raidDataMember = new RaidDataMember(component.User.Id, job, component.Data.CustomId == "helpout", isSprout, isMentor);
+                        var raidDataMember = new RaidDataMember(component.User.Id, GetNick(component.User), job, component.Data.CustomId == "helpout", isSprout, isMentor);
 
                         if (RaidComp.CanAddPlayer(raidData.Members, raidDataMember, raidData.Comp, component.User.Id))
                         {
@@ -646,7 +652,7 @@ internal partial class Raid
                         return;
                     }
                     (bool isSprout, bool isMentor) = IsMentorSprout(user);
-                    var raidDataMember = new RaidDataMember(user.Id, job.Value.Id, option.Name == "helper", isSprout, isMentor);
+                    var raidDataMember = new RaidDataMember(user.Id, GetNick(user), job.Value.Id, option.Name == "helper", isSprout, isMentor);
 
                     if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id))
                     {
