@@ -14,7 +14,10 @@ internal enum RoleType
     AllRounder,
 }
 
-internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row);
+internal record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row)
+{
+    public readonly bool DuplicatesAllowed => Id is "TNK" or "HLR" or "DPS" or "ALR";
+}
 
 [Serializable]
 internal class RaidData(string title, bool hasPinged, bool hasStarted, long time, ulong creator, ulong channel, ulong voiceChannel, ContentComp comp, List<RaidDataMember> members)
@@ -115,6 +118,12 @@ internal partial class Raid
                 .WithType(ApplicationCommandOptionType.SubCommand)
                 .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
                 .AddOption("time", ApplicationCommandOptionType.String, "The new time in server time", isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("clearsignups")
+                .WithDescription("Removes everyone signed up from the raid")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String, "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
             .Build(),
 
@@ -381,7 +390,7 @@ internal partial class Raid
             {
                 UserJobs.Data[component.User.Id] = job.Id;
                 UserJobs.Save();
-                await component.RespondAsync("Job selected! Sign up for raids now", ephemeral: true);
+                await component.UpdateAsync(m => m.Content = $"Selected {job.Emote}{job.Name}! Sign up for raids now");
             }
         }
     }
@@ -484,7 +493,7 @@ internal partial class Raid
         var id = ulong.Parse(textInput.CustomId);
         if (Raids.Data.TryGetValue(id, out var raidData))
         {
-            await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData)}", ephemeral: false);
+            await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData, false)}", ephemeral: false);
         }
         else
         {
@@ -492,12 +501,23 @@ internal partial class Raid
         }
     }
 
-    private static string PingText(RaidData raidData)
+    private static string PingText(RaidData raidData, bool is30MinPing)
     {
-        var hasHelpers = raidData.Members.Any(m => m.Helper);
         var players = string.Join(", ", raidData.Members.Where(m => !m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
         var helpers = string.Join(", ", raidData.Members.Where(m => m.Helper).Select(m => MentionUtils.MentionUser(m.UserId)));
-        return $"{raidData.Title} starts <t:{raidData.Time}:R>: {players}{(hasHelpers ? $" (and helpers {helpers})" : "")}";
+        var msg = $"{raidData.Title} starts <t:{raidData.Time}:R>: {players}";
+        if (!string.IsNullOrEmpty(helpers))
+        {
+            if (is30MinPing)
+            {
+                msg += $"\nHelpers, please `Sign up` now to confirm your slot: {helpers}";
+            }
+            else
+            {
+                msg += $" (and helpers {helpers})";
+            }
+        }
+        return msg;
     }
 
     private async Task DeleteRaidMessageCommand(SocketMessageCommand command)
@@ -553,7 +573,7 @@ internal partial class Raid
                     }
                     if (msg is not null)
                     {
-                        await ch.SendMessageAsync(PingText(raid));
+                        await ch.SendMessageAsync(PingText(raid, true));
                     }
                 }
             }
@@ -731,6 +751,22 @@ internal partial class Raid
                         m.Components = BuildMessageComponents();
                     });
                     await command.RespondAsync($"Time changed to <t:{raid.Time}:F>", ephemeral: true);
+                }
+                break;
+            case "clearsignups":
+                {
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    (var messageData, var raid) = raidResult.Value;
+                    raid.Members.Clear();
+                    CleanSaveRaids();
+                    await messageData.ModifyAsync(m =>
+                    {
+                        m.Embed = BuildEmbed(raid);
+                        m.Components = BuildMessageComponents();
+                    });
+                    await command.RespondAsync($"Players cleared", ephemeral: true);
                 }
                 break;
         }

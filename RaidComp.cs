@@ -88,8 +88,15 @@ internal class RaidComp
             return true;
         CompCount count = new();
         foreach (var member in members)
+        {
             if (!member.Helper && member.UserId != ignoreId)
+            {
                 count.Add(member);
+                if (toAdd.JobData?.DuplicatesAllowed == false && member.JobData?.Id == toAdd.JobData?.Id)
+                    return false;
+            }
+        }
+
         count.Add(toAdd);
         return count.Valid(contentComp);
     }
