@@ -9,12 +9,17 @@ public struct ContentComp(int tanks, int healers, int dps)
     public readonly int Count => Tanks + Healers + Dps;
 }
 
-internal class RaidComp
+internal static class RaidComp
 {
     private record struct CompCount(int Tanks, int Healers, int Dps, int Allrounders)
     {
         public readonly int Count => Tanks + Healers + Dps + Allrounders;
-        public readonly bool Valid(ContentComp contentComp) => Tanks <= contentComp.Tanks && Healers <= contentComp.Healers && Dps <= contentComp.Dps && Count <= contentComp.Count;
+
+        public readonly bool Valid(ContentComp contentComp) =>
+            Tanks <= contentComp.Tanks &&
+            Healers <= contentComp.Healers &&
+            Dps <= contentComp.Dps &&
+            Count <= contentComp.Count;
 
         public void Add(RaidDataMember member)
         {
@@ -38,14 +43,21 @@ internal class RaidComp
         }
     }
 
-    public static IEnumerable<string> FormatPlayerList(List<RaidDataMember> members, ContentComp contentComp)
+    public static IEnumerable<string> FormatPlayerList(List<RaidDataMember> members, ContentComp contentComp,
+        bool requiresMentor)
     {
         CompCount count = new();
+        var hasMentor = false;
         foreach (var member in members)
+        {
             if (!member.Helper)
                 count.Add(member);
+            if (member.Mentor)
+                hasMentor = true;
+        }
+
         var full = count.Count == contentComp.Count;
-        int memberIndex = 0;
+        var memberIndex = 0;
 
         // TODO: Ignore helpers?
         while (memberIndex < members.Count && members[memberIndex].JobData?.RoleType == RoleType.Tank)
@@ -53,8 +65,9 @@ internal class RaidComp
             yield return Raid.FormatMember(members[memberIndex]);
             memberIndex++;
         }
+
         if (!full)
-            for (int i = count.Tanks; i < contentComp.Tanks; i++)
+            for (var i = count.Tanks; i < contentComp.Tanks; i++)
                 yield return Raid.TankEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count && members[memberIndex].JobData?.RoleType == RoleType.Healer)
@@ -62,8 +75,9 @@ internal class RaidComp
             yield return Raid.FormatMember(members[memberIndex]);
             memberIndex++;
         }
+
         if (!full)
-            for (int i = count.Healers; i < contentComp.Healers; i++)
+            for (var i = count.Healers; i < contentComp.Healers; i++)
                 yield return Raid.HealerEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count && members[memberIndex].JobData?.RoleType == RoleType.Dps)
@@ -71,8 +85,9 @@ internal class RaidComp
             yield return Raid.FormatMember(members[memberIndex]);
             memberIndex++;
         }
+
         if (!full)
-            for (int i = count.Dps; i < contentComp.Dps; i++)
+            for (var i = count.Dps; i < contentComp.Dps; i++)
                 yield return Raid.DpsEmote + " " + Raid.PlaceholderDash;
 
         while (memberIndex < members.Count)
@@ -80,15 +95,24 @@ internal class RaidComp
             yield return Raid.FormatMember(members[memberIndex]);
             memberIndex++;
         }
+
+        if (requiresMentor && !hasMentor)
+        {
+            yield return Raid.crown + " needed";
+        }
     }
 
-    public static bool CanAddPlayer(List<RaidDataMember> members, RaidDataMember toAdd, ContentComp contentComp, ulong ignoreId)
+    public static bool CanAddPlayer(List<RaidDataMember> members, RaidDataMember toAdd, ContentComp contentComp,
+        ulong ignoreId, bool requiresMentor)
     {
         if (toAdd.Helper)
             return true;
         CompCount count = new();
+        var hasMentor = false;
         foreach (var member in members)
         {
+            if (member.Mentor)
+                hasMentor = true;
             if (!member.Helper && member.UserId != ignoreId)
             {
                 count.Add(member);
@@ -98,6 +122,8 @@ internal class RaidComp
         }
 
         count.Add(toAdd);
+        if (requiresMentor && !hasMentor && !toAdd.Mentor && count.Count == contentComp.Count)
+            return false;
         return count.Valid(contentComp);
     }
 }
