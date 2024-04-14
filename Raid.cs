@@ -607,6 +607,15 @@ internal partial class Raid
         {
             raidData.requiresMentor = !raidData.requiresMentor;
             CleanSaveRaids();
+            if (command.Data.Message is IUserMessage message)
+            {
+                await message.ModifyAsync(m =>
+                {
+                    m.Embed = BuildEmbed(raidData);
+                    m.Components = BuildMessageComponents();
+                });
+            }
+
             await command.RespondAsync(
                 raidData.requiresMentor ? "Raid set to now require a mentor" : "Raid no longer requires a mentor",
                 ephemeral: true);
