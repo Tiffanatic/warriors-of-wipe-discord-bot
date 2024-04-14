@@ -609,6 +609,10 @@ internal partial class Raid
             CleanSaveRaids();
             if (command.Data.Message is IUserMessage message)
             {
+                // discord.net is so bad, omfg
+                if (message.Channel == null)
+                    message = await (await command.GetChannelAsync()).GetMessageAsync(message.Id) as IUserMessage ??
+                              message;
                 await message.ModifyAsync(m =>
                 {
                     m.Embed = BuildEmbed(raidData);
