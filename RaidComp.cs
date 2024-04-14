@@ -50,8 +50,9 @@ internal static class RaidComp
         var hasMentor = false;
         foreach (var member in members)
         {
-            if (!member.Helper)
-                count.Add(member);
+            if (member.Helper)
+                continue;
+            count.Add(member);
             if (member.Mentor)
                 hasMentor = true;
         }
