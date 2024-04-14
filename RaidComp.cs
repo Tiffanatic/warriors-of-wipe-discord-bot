@@ -111,13 +111,13 @@ internal static class RaidComp
         var hasMentor = false;
         foreach (var member in members)
         {
-            if (member.Mentor)
-                hasMentor = true;
             if (!member.Helper && member.UserId != ignoreId)
             {
                 count.Add(member);
                 if (toAdd.JobData?.DuplicatesAllowed == false && member.JobData?.Id == toAdd.JobData?.Id)
                     return false;
+                if (member.Mentor)
+                    hasMentor = true;
             }
         }
 
