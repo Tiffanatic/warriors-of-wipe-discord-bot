@@ -303,9 +303,9 @@ internal partial class Raid
             return false;
         }
 
-        if (time > now.AddDays(7))
+        if (time > now.AddDays(14))
         {
-            message = "Cannot make a raid more than a week from now";
+            message = "Cannot make a raid more than two weeks from now";
             return false;
         }
 
