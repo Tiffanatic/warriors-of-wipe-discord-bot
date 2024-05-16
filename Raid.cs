@@ -521,26 +521,19 @@ internal partial class Raid
 
     private async Task PingRaidMessageCommand(SocketMessageCommand command)
     {
-        if (command is { User: IGuildUser user, GuildId: WarriorsOfWipeGuildId } &&
-            user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId))
+        if (!Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData))
+            await command.RespondAsync("Error: couldn't find raid data", ephemeral: true);
+        else if (command is { User: IGuildUser user, GuildId: WarriorsOfWipeGuildId } &&
+                 user.RoleIds.All(r => r != MentorRoleId && r != ModRoleId) &&
+                 user.Id != raidData.Creator)
+            await command.RespondAsync("Only mentors and the raid creator can ping events!", ephemeral: true);
+        else if (raidData.Members.Count == 0)
+            await command.RespondAsync("There's no one signed up to ping", ephemeral: true);
+        else
         {
-            await command.RespondAsync("Only mentors can ping events!", ephemeral: true);
-        }
-        else if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData3))
-        {
-            if (raidData3.Members.Count == 0)
-            {
-                await command.RespondAsync("There's no one signed up to ping", ephemeral: true);
-                return;
-            }
-
             var modalBuilder = new ModalBuilder("Enter ping text", "ping");
             modalBuilder.AddTextInput("Ping text", command.Data.Message.Id.ToString(), required: false);
             await command.RespondWithModalAsync(modalBuilder.Build());
-        }
-        else
-        {
-            await command.RespondAsync("Error: couldn't find raid data", ephemeral: true);
         }
     }
 
