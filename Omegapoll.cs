@@ -42,7 +42,7 @@ public class Omegapoll
                 .AddOption("choices", ApplicationCommandOptionType.String, "Enter choices seperated by either | or ,",
                     isRequired: true)
                 .AddOption("duration", ApplicationCommandOptionType.Integer, "Duration, in hours", isRequired: true)
-                .AddOption("multipleAnswers", ApplicationCommandOptionType.Boolean, "Allow multiple answers",
+                .AddOption("multipleanswers", ApplicationCommandOptionType.Boolean, "Allow multiple answers",
                     isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
@@ -57,7 +57,7 @@ public class Omegapoll
                 .AddOption("choices", ApplicationCommandOptionType.String, "Enter choices seperated by either | or ,",
                     isRequired: true)
                 .AddOption("duration", ApplicationCommandOptionType.Integer, "Duration, in hours", isRequired: true)
-                .AddOption("multipleAnswers", ApplicationCommandOptionType.Boolean, "Allow multiple answers",
+                .AddOption("multipleanswers", ApplicationCommandOptionType.Boolean, "Allow multiple answers",
                     isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
