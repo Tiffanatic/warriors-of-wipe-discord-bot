@@ -12,6 +12,7 @@ public static class Program
             Console.WriteLine("Token not set");
             return;
         }
+
         DiscordSocketClient client = new(new() { GatewayIntents = GatewayIntents.None });
         client.Log += m =>
         {
@@ -19,7 +20,9 @@ public static class Program
             return Task.CompletedTask;
         };
         _ = new Raid(client);
-        client.Ready += () => client.BulkOverwriteGlobalApplicationCommandsAsync(Raid.Commands);
+        _ = new Omegapoll(client);
+        client.Ready += () =>
+            client.BulkOverwriteGlobalApplicationCommandsAsync(Raid.Commands.Concat(Omegapoll.Commands).ToArray());
         await client.LoginAsync(TokenType.Bot, config.Data.token);
         await client.StartAsync();
         await Task.Delay(-1);
