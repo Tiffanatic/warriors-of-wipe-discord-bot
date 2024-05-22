@@ -3,6 +3,7 @@
 /bin/
 userjobs.json
 raid.json
+polls.json
 /.vs/
 /.idea/
 /.vscode/

@@ -22,18 +22,19 @@ public class GetPollResults
 
     private async Task SlashCommandExecuted(SocketSlashCommand command)
     {
-        if (command.CommandName is not "omegapoll")
+        if (command.CommandName is not "getpollresults")
             return;
-
-        // might take a while to run
-        await command.DeferAsync(true);
 
         var channel = await command.GetChannelAsync();
         StringBuilder msg = new();
+        var numMessagesSeen = 0;
+        bool anySeen = false;
         await foreach (var messageBatch in channel.GetMessagesAsync())
         {
+            anySeen = true;
             foreach (var message in messageBatch)
             {
+                numMessagesSeen++;
                 if (message is SocketUserMessage userMessage && userMessage.Poll.HasValue &&
                     userMessage.Poll.Value.Results.HasValue)
                 {
@@ -62,6 +63,22 @@ public class GetPollResults
             }
         }
 
-        await command.FollowupAsync(msg.ToString(), ephemeral: true);
+        var msgText = msg.ToString();
+        if (string.IsNullOrEmpty(msgText))
+        {
+            if (numMessagesSeen == 0)
+            {
+                await command.RespondAsync("No messages were able to be fetched (anySeen=" + anySeen + ")",
+                    ephemeral: true);
+            }
+            else
+            {
+                await command.RespondAsync("No polls found", ephemeral: true);
+            }
+        }
+        else
+        {
+            await command.RespondAsync(msg.ToString(), ephemeral: true);
+        }
     }
 }
