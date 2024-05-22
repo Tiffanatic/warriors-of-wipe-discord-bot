@@ -33,6 +33,13 @@ public class Omegapoll
                     isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
+                .WithName("showbatch")
+                .WithDescription("Prints info about a poll batch")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("name", ApplicationCommandOptionType.String, "The name of the poll batch to show",
+                    isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
                 .WithName("add")
                 .WithDescription("Adds a new poll to a poll batch")
                 .WithType(ApplicationCommandOptionType.SubCommand)
@@ -151,6 +158,18 @@ public class Omegapoll
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
                     Polls.Save();
+                }
+                break;
+            case "showbatch":
+                {
+                    var name = (string)options[0].Value;
+                    if (Polls.Data.TryGetValue(name, out var list))
+                    {
+                        await command.RespondAsync($"Polls in group {name}:\n{PollEntry.ToString(list)}",
+                            ephemeral: true);
+                    }
+                    else
+                        await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
                 }
                 break;
             case "add":
