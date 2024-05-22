@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
 
 namespace WarriorsOfWipeBot;
@@ -25,20 +26,23 @@ public class GetPollResults
         if (command.CommandName is not "getpollresults")
             return;
 
+        await command.RespondAsync("Thinking, please wait...", ephemeral: true);
+
         var channel = await command.GetChannelAsync();
-        StringBuilder msg = new();
+        List<string> msgList = [];
         var numMessagesSeen = 0;
-        bool anySeen = false;
+        var anySeen = false;
         await foreach (var messageBatch in channel.GetMessagesAsync())
         {
             anySeen = true;
             foreach (var message in messageBatch)
             {
                 numMessagesSeen++;
-                if (message is SocketUserMessage userMessage && userMessage.Poll.HasValue &&
+                if (message is RestUserMessage userMessage && userMessage.Poll.HasValue &&
                     userMessage.Poll.Value.Results.HasValue)
                 {
                     var poll = userMessage.Poll.Value;
+                    StringBuilder msg = new();
                     msg.AppendLine(poll.Question.Text);
 
                     foreach (var option in poll.Answers)
@@ -59,26 +63,29 @@ public class GetPollResults
 
                         msg.AppendLine();
                     }
+
+                    msgList.Add(msg.ToString());
                 }
             }
         }
 
-        var msgText = msg.ToString();
+        msgList.Reverse(); // reverse!!
+        var msgText = string.Join("", msgList).Trim();
         if (string.IsNullOrEmpty(msgText))
         {
             if (numMessagesSeen == 0)
             {
-                await command.RespondAsync("No messages were able to be fetched (anySeen=" + anySeen + ")",
-                    ephemeral: true);
+                await command.ModifyOriginalResponseAsync(m =>
+                    m.Content = "No messages were able to be fetched (anySeen=" + anySeen + ")");
             }
             else
             {
-                await command.RespondAsync("No polls found", ephemeral: true);
+                await command.ModifyOriginalResponseAsync(m => m.Content = "No polls found");
             }
         }
         else
         {
-            await command.RespondAsync(msg.ToString(), ephemeral: true);
+            await command.ModifyOriginalResponseAsync(m => m.Content = msgText);
         }
     }
 }
