@@ -155,7 +155,7 @@ public class Omegapoll
                     var name = (string)options[0].Value;
                     var question = (string)options[1].Value;
                     var choices = (string)options[2].Value;
-                    var duration = (int)options[3].Value;
+                    var duration = (long)options[3].Value;
                     var allowMultiselect = (bool)options[4].Value;
                     if (Polls.Data.TryGetValue(name, out var list))
                     {
@@ -173,10 +173,10 @@ public class Omegapoll
             case "edit":
                 {
                     var name = (string)options[0].Value;
-                    var index = (int)options[1].Value;
+                    var index = (long)options[1].Value;
                     var question = (string)options[2].Value;
                     var choices = (string)options[3].Value;
-                    var duration = (int)options[4].Value;
+                    var duration = (long)options[4].Value;
                     var allowMultiselect = (bool)options[5].Value;
                     if (Polls.Data.TryGetValue(name, out var list))
                     {
@@ -188,7 +188,7 @@ public class Omegapoll
                         {
                             var choicesArr = choices.Split(new[] { ',', '|' },
                                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                            list[index] = new(question, choicesArr, (uint)duration, allowMultiselect);
+                            list[(int)index] = new(question, choicesArr, (uint)duration, allowMultiselect);
                             Polls.Save();
                             await command.RespondAsync(
                                 $"Poll edited. Polls in group {name}:\n{PollEntry.ToString(list)}",
@@ -202,7 +202,7 @@ public class Omegapoll
             case "remove":
                 {
                     var name = (string)options[0].Value;
-                    var index = (int)options[1].Value;
+                    var index = (long)options[1].Value;
                     if (Polls.Data.TryGetValue(name, out var list))
                     {
                         if (index < 0 || index >= list.Count)
@@ -211,7 +211,7 @@ public class Omegapoll
                         }
                         else
                         {
-                            list.RemoveAt(index);
+                            list.RemoveAt((int)index);
                             Polls.Save();
                             await command.RespondAsync(
                                 $"Poll removed. Polls in group {name}:\n{PollEntry.ToString(list)}",
