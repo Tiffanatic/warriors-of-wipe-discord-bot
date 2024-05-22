@@ -124,8 +124,9 @@ public class Omegapoll
                     var name = (string)options[0].Value;
                     if (Polls.Data.TryGetValue(name, out var list))
                     {
+                        var channel = await command.GetChannelAsync();
                         foreach (var poll in list)
-                            await command.Channel.SendMessageAsync(poll: poll.ToProps());
+                            await channel.SendMessageAsync(poll: poll.ToProps());
                     }
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
@@ -139,6 +140,7 @@ public class Omegapoll
                     else
                         await command.RespondAsync(
                             "Poll batch " + name + " already exists (use deletebatch to delete it)", ephemeral: true);
+                    Polls.Save();
                 }
                 break;
             case "deletebatch":
@@ -148,6 +150,7 @@ public class Omegapoll
                         await command.RespondAsync("Poll batch " + name + " deleted", ephemeral: true);
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
+                    Polls.Save();
                 }
                 break;
             case "add":
