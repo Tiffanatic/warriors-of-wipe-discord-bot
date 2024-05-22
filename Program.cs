@@ -21,8 +21,10 @@ public static class Program
         };
         _ = new Raid(client);
         _ = new Omegapoll(client);
+        _ = new GetPollResults(client);
         client.Ready += () =>
-            client.BulkOverwriteGlobalApplicationCommandsAsync(Raid.Commands.Concat(Omegapoll.Commands).ToArray());
+            client.BulkOverwriteGlobalApplicationCommandsAsync(Raid.Commands.Concat(Omegapoll.Commands)
+                .Concat(GetPollResults.Commands).ToArray());
         await client.LoginAsync(TokenType.Bot, config.Data.token);
         await client.StartAsync();
         await Task.Delay(-1);
