@@ -53,6 +53,21 @@ public class Omegapoll
                     isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
+                .WithName("insert")
+                .WithDescription("Inserts a new poll into a poll batch at the index")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("name", ApplicationCommandOptionType.String, "The name of the poll batch to add to",
+                    isRequired: true)
+                .AddOption("index", ApplicationCommandOptionType.Integer,
+                    "The index of the poll within the poll batch you want to insert at", isRequired: true)
+                .AddOption("question", ApplicationCommandOptionType.String, "The title of the poll", isRequired: true)
+                .AddOption("choices", ApplicationCommandOptionType.String, "Enter choices seperated by either | or ,",
+                    isRequired: true)
+                .AddOption("duration", ApplicationCommandOptionType.Integer, "Duration, in hours", isRequired: true)
+                .AddOption("multipleanswers", ApplicationCommandOptionType.Boolean, "Allow multiple answers",
+                    isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
                 .WithName("edit")
                 .WithDescription("Edits a poll in a poll batch")
                 .WithType(ApplicationCommandOptionType.SubCommand)
@@ -187,6 +202,35 @@ public class Omegapoll
                         Polls.Save();
                         await command.RespondAsync($"Poll added. Polls in group {name}:\n{PollEntry.ToString(list)}",
                             ephemeral: true);
+                    }
+                    else
+                        await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
+                }
+                break;
+            case "insert":
+                {
+                    var name = (string)options[0].Value;
+                    var index = (long)options[1].Value;
+                    var question = (string)options[2].Value;
+                    var choices = (string)options[3].Value;
+                    var duration = (long)options[4].Value;
+                    var allowMultiselect = (bool)options[5].Value;
+                    if (Polls.Data.TryGetValue(name, out var list))
+                    {
+                        if (index < 0 || index > list.Count)
+                        {
+                            await command.RespondAsync("Poll index out of range of list", ephemeral: true);
+                        }
+                        else
+                        {
+                            var choicesArr = choices.Split(new[] { ',', '|' },
+                                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            list.Insert((int)index, new(question, choicesArr, (uint)duration, allowMultiselect));
+                            Polls.Save();
+                            await command.RespondAsync(
+                                $"Poll inserted. Polls in group {name}:\n{PollEntry.ToString(list)}",
+                                ephemeral: true);
+                        }
                     }
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
