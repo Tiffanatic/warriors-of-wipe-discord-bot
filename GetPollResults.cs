@@ -38,8 +38,7 @@ public class GetPollResults
             foreach (var message in messageBatch)
             {
                 numMessagesSeen++;
-                if (message is RestUserMessage userMessage && userMessage.Poll.HasValue &&
-                    userMessage.Poll.Value.Results.HasValue)
+                if (message is RestUserMessage userMessage && userMessage.Poll.HasValue)
                 {
                     var poll = userMessage.Poll.Value;
                     StringBuilder msg = new();
@@ -47,7 +46,7 @@ public class GetPollResults
 
                     foreach (var option in poll.Answers)
                     {
-                        msg.Append(option.PollMedia.Text + ": ");
+                        msg.Append("### " + option.PollMedia.Text + ": ");
                         var first = true;
                         await foreach (var userArray in userMessage.GetPollAnswerVotersAsync(option.AnswerId))
                         {
