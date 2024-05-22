@@ -42,11 +42,11 @@ public class GetPollResults
                 {
                     var poll = userMessage.Poll.Value;
                     StringBuilder msg = new();
-                    msg.AppendLine(poll.Question.Text);
+                    msg.AppendLine("### " + poll.Question.Text);
 
                     foreach (var option in poll.Answers)
                     {
-                        msg.Append("### " + option.PollMedia.Text + ": ");
+                        msg.Append(option.PollMedia.Text + ": ");
                         var first = true;
                         await foreach (var userArray in userMessage.GetPollAnswerVotersAsync(option.AnswerId))
                         {
