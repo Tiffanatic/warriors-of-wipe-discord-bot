@@ -122,6 +122,13 @@ internal partial class Raid
                     "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
+                .WithName("whoisthis")
+                .WithDescription("Shows who is in a raid if nicknames got changed")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String,
+                    "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
                 .WithName("changetitle")
                 .WithDescription("Changes the title of a raid")
                 .WithType(ApplicationCommandOptionType.SubCommand)
@@ -812,6 +819,16 @@ internal partial class Raid
                     if (raid == null)
                         return;
                     await command.RespondAsync($"{MentionUtils.MentionUser(raid.Creator)}", ephemeral: true);
+                }
+                break;
+            case "whoisthis":
+                {
+                    var raid = await GetRaidData(0);
+                    if (raid == null)
+                        return;
+                    var msg = string.Join(Environment.NewLine,
+                        raid.Members.Select(m => $"{m.Nick} => {MentionUtils.MentionUser(m.UserId)}"));
+                    await command.RespondAsync(msg, ephemeral: true);
                 }
                 break;
             case "changetitle":
