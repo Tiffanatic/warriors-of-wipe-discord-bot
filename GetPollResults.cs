@@ -68,6 +68,7 @@ public class GetPollResults
             }
         }
 
+        const int maxMessageLength = 2000;
         msgList.Reverse(); // reverse!!
         var msgText = string.Join("", msgList).Trim();
         if (string.IsNullOrEmpty(msgText))
@@ -84,7 +85,31 @@ public class GetPollResults
         }
         else
         {
-            await command.ModifyOriginalResponseAsync(m => m.Content = msgText);
+            if (msgText.Length < maxMessageLength)
+            {
+                await command.ModifyOriginalResponseAsync(m => m.Content = msgText);
+            }
+            else
+            {
+                using var memstream = new MemoryStream(Encoding.UTF8.GetBytes(msgText));
+                await command.ModifyOriginalResponseAsync(m =>
+                {
+                    m.Content = "Message too long, see attachment for results. Also DM'ing you the results in a formatted message with names resolved (can also copypaste the attachment into discord send message textbox to resolve names).";
+                    m.Attachments = new[] { new FileAttachment(memstream, "results.txt") };
+                });
+                for (var i = 0; i < msgList.Count - 1; i++)
+                {
+                    if (msgList[i].Length + msgList[i + 1].Length < maxMessageLength)
+                    {
+                        msgList[i] += msgList[i + 1];
+                        msgList.RemoveAt(i + 1);
+                        i--;
+                    }
+                }
+
+                foreach (var msg in msgList)
+                    await command.User.SendMessageAsync(msg);
+            }
         }
     }
 }
