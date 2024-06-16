@@ -151,6 +151,13 @@ internal partial class Raid
                 .AddOption("raid", ApplicationCommandOptionType.String,
                     "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("repost")
+                .WithDescription("Deletes and reposts the raid, putting it at the bottom of the channel")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String,
+                    "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
+            )
             .Build(),
 
         new MessageCommandBuilder()
@@ -633,8 +640,12 @@ internal partial class Raid
     private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
     {
         // TODO: This event doesn't seem to be called
-        Raids.Data.Remove(message.Id);
-        CleanSaveRaids();
+        if (Raids.Data.Remove(message.Id))
+        {
+            Console.WriteLine($"Raid MessageDeleted: {message.Id}");
+            CleanSaveRaids();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -884,6 +895,21 @@ internal partial class Raid
                         m.Components = BuildMessageComponents();
                     });
                     await command.RespondAsync($"Players cleared", ephemeral: true);
+                }
+                break;
+            case "repost":
+                {
+                    var raidResult = await GetRaid(0);
+                    if (!raidResult.HasValue)
+                        return;
+                    var (messageData, raidData) = raidResult.Value;
+                    var channel = await command.GetChannelAsync();
+                    var message = await channel.SendMessageAsync(allowedMentions: new(AllowedMentionTypes.None),
+                        components: BuildMessageComponents(), embed: BuildEmbed(raidData));
+                    Raids.Data.Add(message.Id, raidData);
+                    CleanSaveRaids();
+                    await messageData.DeleteAsync();
+                    await command.RespondAsync("Reposted", ephemeral: true);
                 }
                 break;
         }
