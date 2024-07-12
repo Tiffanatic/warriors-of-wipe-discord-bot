@@ -13,7 +13,8 @@ public static class Program
             return;
         }
 
-        DiscordSocketClient client = new(new() { GatewayIntents = GatewayIntents.None });
+        // MessageContent used for NoLfg.cs
+        DiscordSocketClient client = new(new() { GatewayIntents = GatewayIntents.MessageContent });
         client.Log += m =>
         {
             Console.WriteLine(m);
@@ -22,6 +23,7 @@ public static class Program
         _ = new Raid(client);
         _ = new Omegapoll(client);
         _ = new GetPollResults(client);
+        _ = new NoLfg(client);
         client.Ready += () =>
             client.BulkOverwriteGlobalApplicationCommandsAsync(Raid.Commands.Concat(Omegapoll.Commands)
                 .Concat(GetPollResults.Commands).ToArray());
