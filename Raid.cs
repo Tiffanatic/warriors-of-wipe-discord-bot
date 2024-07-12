@@ -201,15 +201,17 @@ internal partial class Raid
         new("NIN", "<:Ninja:1215315433414987887>", "Ninja", RoleType.Dps, 2),
         new("SAM", "<:Samurai:1215315444362125364>", "Samurai", RoleType.Dps, 2),
         new("RPR", "<:Reaper:1215315437743505448>", "Reaper", RoleType.Dps, 2),
+        new("VPR", "<:Viper:1261244787927941140>", "Viper", RoleType.Dps, 3),
 
         new("BRD", "<:Bard:1215315416805802035>", "Bard", RoleType.Dps, 3),
         new("MCH", "<:Machinist:1215315429397102613>", "Machinist", RoleType.Dps, 3),
         new("DNC", "<:Dancer:1215315420668764231>", "Dancer", RoleType.Dps, 3),
+        new("DPS", DpsEmote, "Omni-dps", RoleType.Dps, 3),
 
         new("BLM", "<:BlackMage:1215315418563223592>", "Black Mage", RoleType.Dps, 4),
         new("SMN", "<:Summoner:1215315493561307176>", "Summoner", RoleType.Dps, 4),
         new("RDM", "<:RedMage:1215315492198293534>", "Red Mage", RoleType.Dps, 4),
-        new("DPS", DpsEmote, "Omni-dps", RoleType.Dps, 4),
+        new("PCT", "<:Pictomancer:1261244789031178290>", "Pictomancer", RoleType.Dps, 4),
 
         new("ALR", "<:Allrounder:1215319950747508736>", "All-rounder", RoleType.AllRounder, 4),
     ];
