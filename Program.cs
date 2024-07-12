@@ -14,7 +14,8 @@ public static class Program
         }
 
         // MessageContent used for NoLfg.cs
-        DiscordSocketClient client = new(new() { GatewayIntents = GatewayIntents.MessageContent });
+        DiscordSocketClient client = new(new()
+            { GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMessages | GatewayIntents.MessageContent });
         client.Log += m =>
         {
             Console.WriteLine(m);

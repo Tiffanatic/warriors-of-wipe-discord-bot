@@ -6,13 +6,9 @@ namespace WarriorsOfWipeBot;
 public class NoLfg
 {
     private const ulong ModLogsChannel = 1211482792328831017UL;
-    // private const ulong LfgChannel = 1209317207490957362UL;
+    private const ulong LfgChannel = 1209317207490957362UL;
     private const ulong LfgChatChannel = 1211466357669896284UL;
-    // private const ulong ModsRole = 1208599020134600734UL;
-    
-    // Testing:
-    private const ulong LfgChannel = 1214240087001268305UL;
-    private const ulong ModsRole = 1208599020134600735UL;
+    private const ulong ModsRole = 1208599020134600734UL;
 
     public NoLfg(DiscordSocketClient client)
     {
