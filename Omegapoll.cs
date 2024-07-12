@@ -5,6 +5,8 @@ namespace WarriorsOfWipeBot;
 
 public class Omegapoll
 {
+    private const ulong WarriorsOfWipeGuildId = 1208569487964643418UL;
+
     public static readonly ApplicationCommandProperties[] Commands =
     [
         new SlashCommandBuilder()
@@ -133,7 +135,7 @@ public class Omegapoll
 
     private async Task SlashCommandExecuted(SocketSlashCommand command)
     {
-        if (command.CommandName is not "omegapoll")
+        if (command.CommandName is not "omegapoll" || command.GuildId != WarriorsOfWipeGuildId)
             return;
 
         var option = command.Data.Options.Single();
