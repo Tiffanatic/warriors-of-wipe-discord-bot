@@ -37,6 +37,8 @@ public class NoLfg
         }
         catch (Exception e)
         {
+            Console.WriteLine("Failed to send NoLfg DM:");
+            Console.WriteLine(e);
             failed = true;
         }
 
