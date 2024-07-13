@@ -29,13 +29,21 @@ public class NoLfg
         if (msg.Attachments.Count > 0 || msg.Embeds.Count > 0)
             return;
 
-        await author.SendMessageAsync(
-            $"{MentionUtils.MentionChannel(msg.Channel.Id)} is only for posting /raid signups or PF posts. Please use {MentionUtils.MentionChannel(LfgChatChannel)} to chat and organize further.");
+        var failed = false;
+        try
+        {
+            await author.SendMessageAsync(
+                $"{MentionUtils.MentionChannel(msg.Channel.Id)} is only for posting /raid signups or PF posts. Please use {MentionUtils.MentionChannel(LfgChatChannel)} to chat and organize further.");
+        }
+        catch (Exception e)
+        {
+            failed = true;
+        }
 
         if (msg.Channel is SocketGuildChannel channel && channel.Guild.GetTextChannel(ModLogsChannel) is { } modLogs)
         {
             await modLogs.SendMessageAsync(
-                $"{author.Mention} tried to send a message in {MentionUtils.MentionChannel(msg.Channel.Id)}: {msg.Content}");
+                $"{author.Mention} tried to send a message in {MentionUtils.MentionChannel(msg.Channel.Id)}{(failed ? " (failed to send DM)" : "")}: {msg.Content}");
         }
 
         await msg.DeleteAsync();
