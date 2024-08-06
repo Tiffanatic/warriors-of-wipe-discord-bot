@@ -59,11 +59,11 @@ internal class RaidDataMember(ulong userId, string nick, string job, bool helper
 }
 
 [Serializable]
-internal class MessageDeleteEntry(ulong channelId, ulong messageId, long deleteAt)
+internal class MessageDeleteEntry(ulong channelId, ulong messageId, ulong raidId)
 {
     public ulong ChannelId = channelId;
     public ulong MessageId = messageId;
-    public long DeleteAt = deleteAt;
+    public ulong RaidId = raidId;
 }
 
 internal partial class Raid
@@ -577,7 +577,7 @@ internal partial class Raid
             await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData, false)}",
                 ephemeral: false);
             var response = await modal.GetOriginalResponseAsync();
-            DeletePingAfterHour(response.Channel.Id, response.Id);
+            DeletePingAfterHour(response.Channel.Id, response.Id, id);
         }
         else
         {
@@ -607,10 +607,9 @@ internal partial class Raid
         return msg;
     }
 
-    private void DeletePingAfterHour(ulong channel, ulong message)
+    private void DeletePingAfterHour(ulong channel, ulong message, ulong raidId)
     {
-        var time = DateTimeOffset.UtcNow.AddHours(1);
-        MsgDelete.Data.Add(new(channel, message, time.ToUnixTimeSeconds()));
+        MsgDelete.Data.Add(new(channel, message, raidId));
         MsgDelete.Save();
     }
 
@@ -797,7 +796,7 @@ internal partial class Raid
                     {
                         Console.WriteLine("Raid ping: " + raid.Title);
                         var pingMessage = await ch.SendMessageAsync(PingText(raid, true));
-                        DeletePingAfterHour(raid.Channel, pingMessage.Id);
+                        DeletePingAfterHour(raid.Channel, pingMessage.Id, message);
                     }
                 }
             }
@@ -826,8 +825,13 @@ internal partial class Raid
         for (var i = MsgDelete.Data.Count - 1; i >= 0; i--)
         {
             var entry = MsgDelete.Data[i];
-            if (now < entry.DeleteAt)
-                continue;
+            if (Raids.Data.TryGetValue(entry.RaidId, out var raid))
+            {
+                // 1 hour
+                var deleteAt = raid.Time + 60 * 60;
+                if (now < deleteAt)
+                    continue;
+            }
 
             MsgDelete.Data.RemoveAt(i);
             msgDeleteChanged = true;
