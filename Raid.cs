@@ -58,6 +58,14 @@ internal class RaidDataMember(ulong userId, string nick, string job, bool helper
     public Job? JobData => _jobData ??= Raid.JobFromId(Job);
 }
 
+[Serializable]
+internal class MessageDeleteEntry(ulong channelId, ulong messageId, long deleteAt)
+{
+    public ulong ChannelId = channelId;
+    public ulong MessageId = messageId;
+    public long DeleteAt = deleteAt;
+}
+
 internal partial class Raid
 {
     public static readonly ApplicationCommandProperties[] Commands =
@@ -220,6 +228,7 @@ internal partial class Raid
     private readonly DiscordSocketClient client;
     private readonly Json<Dictionary<ulong, RaidData>> Raids = new("raid.json");
     private readonly Json<Dictionary<ulong, string>> UserJobs = new("userjobs.json");
+    private readonly Json<List<MessageDeleteEntry>> MsgDelete = new("msgdelete.json");
 
     public Raid(DiscordSocketClient client)
     {
@@ -567,6 +576,8 @@ internal partial class Raid
         {
             await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData, false)}",
                 ephemeral: false);
+            var response = await modal.GetOriginalResponseAsync();
+            DeletePingAfterHour(response.Channel.Id, response.Id);
         }
         else
         {
@@ -594,6 +605,13 @@ internal partial class Raid
         }
 
         return msg;
+    }
+
+    private void DeletePingAfterHour(ulong channel, ulong message)
+    {
+        var time = DateTimeOffset.UtcNow.AddHours(1);
+        MsgDelete.Data.Add(new(channel, message, time.ToUnixTimeSeconds()));
+        MsgDelete.Save();
     }
 
     private async Task DeleteRaidMessageCommand(SocketMessageCommand command)
@@ -778,7 +796,8 @@ internal partial class Raid
                     if (msg is not null)
                     {
                         Console.WriteLine("Raid ping: " + raid.Title);
-                        await ch.SendMessageAsync(PingText(raid, true));
+                        var pingMessage = await ch.SendMessageAsync(PingText(raid, true));
+                        DeletePingAfterHour(raid.Channel, pingMessage.Id);
                     }
                 }
             }
@@ -802,6 +821,23 @@ internal partial class Raid
 
         if (changed)
             CleanSaveRaids();
+
+        var msgDeleteChanged = false;
+        for (var i = MsgDelete.Data.Count - 1; i >= 0; i--)
+        {
+            var entry = MsgDelete.Data[i];
+            if (now < entry.DeleteAt)
+                continue;
+
+            MsgDelete.Data.RemoveAt(i);
+            msgDeleteChanged = true;
+
+            if (await client.GetChannelAsync(entry.ChannelId) is IMessageChannel ch)
+                await ch.DeleteMessageAsync(entry.MessageId);
+        }
+
+        if (msgDeleteChanged)
+            MsgDelete.Save();
     }
 
     [GeneratedRegex(@"^(?:https:\/\/discord\.com\/channels\/\d+\/\d+\/)?(?<message>\d+)$")]
