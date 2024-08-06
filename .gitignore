@@ -1,9 +1,10 @@
 /config.json
 /obj/
 /bin/
-userjobs.json
-raid.json
+msgdelete.json
 polls.json
+raid.json
+userjobs.json
 /.vs/
 /.idea/
 /.vscode/
