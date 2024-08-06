@@ -16,7 +16,7 @@ internal enum RoleType
 
 internal readonly record struct Job(string Id, string Emote, string Name, RoleType RoleType, int Row)
 {
-    public readonly bool DuplicatesAllowed => Id is "TNK" or "HLR" or "DPS" or "ALR";
+    public bool DuplicatesAllowed => Id is "TNK" or "HLR" or "DPS" or "ALR";
 }
 
 [Serializable]
@@ -55,7 +55,7 @@ internal class RaidDataMember(ulong userId, string nick, string job, bool helper
     public bool Mentor = mentor;
 
     [NonSerialized] private Job? _jobData;
-    public Job? JobData => _jobData == null ? _jobData = Raid.JobFromId(Job) : _jobData;
+    public Job? JobData => _jobData ??= Raid.JobFromId(Job);
 }
 
 internal partial class Raid
@@ -129,22 +129,6 @@ internal partial class Raid
                     "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
-                .WithName("changetitle")
-                .WithDescription("Changes the title of a raid")
-                .WithType(ApplicationCommandOptionType.SubCommand)
-                .AddOption("raid", ApplicationCommandOptionType.String,
-                    "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
-                .AddOption("title", ApplicationCommandOptionType.String, "The new title", isRequired: true)
-            )
-            .AddOption(new SlashCommandOptionBuilder()
-                .WithName("changetime")
-                .WithDescription("Changes the time of a raid")
-                .WithType(ApplicationCommandOptionType.SubCommand)
-                .AddOption("raid", ApplicationCommandOptionType.String,
-                    "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
-                .AddOption("time", ApplicationCommandOptionType.String, "The new time in server time", isRequired: true)
-            )
-            .AddOption(new SlashCommandOptionBuilder()
                 .WithName("clearsignups")
                 .WithDescription("Removes everyone signed up from the raid")
                 .WithType(ApplicationCommandOptionType.SubCommand)
@@ -169,6 +153,14 @@ internal partial class Raid
             .Build(),
 
         new MessageCommandBuilder()
+            .WithName(ChangeRaidTitleMessageCommandName)
+            .Build(),
+
+        new MessageCommandBuilder()
+            .WithName(ChangeRaidTimeMessageCommandName)
+            .Build(),
+
+        new MessageCommandBuilder()
             .WithDefaultMemberPermissions(GuildPermission.ManageMessages)
             .WithName(ToggleRequiresMentorCommandName)
             .Build(),
@@ -176,6 +168,8 @@ internal partial class Raid
 
     private const string PingRaidMessageCommandName = "Ping /raid";
     private const string DeleteRaidMessageCommandName = "Delete /raid created by you";
+    private const string ChangeRaidTitleMessageCommandName = "Change /raid title";
+    private const string ChangeRaidTimeMessageCommandName = "Change /raid time";
     private const string ToggleRequiresMentorCommandName = "Toggle requires mentor";
     public const string PlaceholderDash = "⸺";
     public const string TankEmote = "<:Tank:1211492267441922048>";
@@ -519,6 +513,12 @@ internal partial class Raid
             case DeleteRaidMessageCommandName:
                 await DeleteRaidMessageCommand(command);
                 break;
+            case ChangeRaidTitleMessageCommandName:
+                await ChangeRaidTitleMessageCommand(command);
+                break;
+            case ChangeRaidTimeMessageCommandName:
+                await ChangeRaidTimeMessageCommand(command);
+                break;
             case ToggleRequiresMentorCommandName:
                 await ToggleRequiresMentorCommand(command);
                 break;
@@ -531,6 +531,12 @@ internal partial class Raid
         {
             case "ping":
                 await PingModalSubmitted(modal);
+                break;
+            case "title":
+                await TitleModalSubmitted(modal);
+                break;
+            case "time":
+                await TimeModalSubmitted(modal);
                 break;
         }
     }
@@ -610,6 +616,111 @@ internal partial class Raid
         }
     }
 
+    private async Task ChangeRaidTitleMessageCommand(SocketMessageCommand command)
+    {
+        if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData))
+        {
+            if (command.User.Id == raidData.Creator ||
+                command is { User: IGuildUser user, GuildId: WarriorsOfWipeGuildId } &&
+                user.RoleIds.Any(r => r is MentorRoleId or ModRoleId))
+            {
+                var modalBuilder = new ModalBuilder("Change title", "title");
+                modalBuilder.AddTextInput("New title", command.Data.Message.Id.ToString(), required: false);
+                await command.RespondWithModalAsync(modalBuilder.Build());
+            }
+            else
+            {
+                await command.RespondAsync("You are not the creator of this raid", ephemeral: true);
+            }
+        }
+        else
+        {
+            await command.RespondAsync("This is not a raid signup form created with /raid", ephemeral: true);
+        }
+    }
+
+    private async Task TitleModalSubmitted(SocketModal modal)
+    {
+        var textInput = modal.Data.Components.Single();
+        var id = ulong.Parse(textInput.CustomId);
+        if (Raids.Data.TryGetValue(id, out var raidData))
+        {
+            raidData.Title = textInput.Value;
+            CleanSaveRaids();
+            var msg = await RebuildRaidMessage(raidData, id) ?? $"Title changed to {raidData.Title}";
+            await modal.RespondAsync(msg, ephemeral: true);
+        }
+        else
+        {
+            await modal.RespondAsync("Raid not found", ephemeral: true);
+        }
+    }
+
+    private async Task ChangeRaidTimeMessageCommand(SocketMessageCommand command)
+    {
+        if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData))
+        {
+            if (command.User.Id == raidData.Creator ||
+                command is { User: IGuildUser user, GuildId: WarriorsOfWipeGuildId } &&
+                user.RoleIds.Any(r => r is MentorRoleId or ModRoleId))
+            {
+                var modalBuilder = new ModalBuilder("Change time", "time");
+                modalBuilder.AddTextInput("Time (in server time): yyyy-MM-dd hh:mm", command.Data.Message.Id.ToString(),
+                    required: false);
+                await command.RespondWithModalAsync(modalBuilder.Build());
+            }
+            else
+            {
+                await command.RespondAsync("You are not the creator of this raid", ephemeral: true);
+            }
+        }
+        else
+        {
+            await command.RespondAsync("This is not a raid signup form created with /raid", ephemeral: true);
+        }
+    }
+
+    private async Task TimeModalSubmitted(SocketModal modal)
+    {
+        var textInput = modal.Data.Components.Single();
+        var id = ulong.Parse(textInput.CustomId);
+        if (Raids.Data.TryGetValue(id, out var raidData))
+        {
+            if (!TryParseTime(textInput.Value, out var time, out var timeErrorMessage))
+            {
+                await modal.RespondAsync(timeErrorMessage, ephemeral: true);
+                return;
+            }
+
+            raidData.Time = time.ToUnixTimeSeconds();
+            CleanSaveRaids();
+            var msg = await RebuildRaidMessage(raidData, id) ?? $"Time changed to <t:{raidData.Time}:F>";
+            await modal.RespondAsync(msg, ephemeral: true);
+        }
+        else
+        {
+            await modal.RespondAsync("Raid not found", ephemeral: true);
+        }
+    }
+
+    // returns error message
+    private async Task<string?> RebuildRaidMessage(RaidData raid, ulong messageId)
+    {
+        if (await client.GetChannelAsync(raid.Channel) is not IMessageChannel ch)
+            return "Unable to fetch channel";
+
+        var messageDataRaw = await ch.GetMessageAsync(messageId);
+        if (messageDataRaw is not IUserMessage messageData)
+            return "Unable to fetch message";
+
+        await messageData.ModifyAsync(m =>
+        {
+            m.Embed = BuildEmbed(raid);
+            m.Components = BuildMessageComponents();
+        });
+        return null;
+    }
+
     private async Task ToggleRequiresMentorCommand(SocketMessageCommand command)
     {
         if (Raids.Data.TryGetValue(command.Data.Message.Id, out var raidData))
@@ -641,7 +752,6 @@ internal partial class Raid
 
     private Task MessageDeleted(Cacheable<IMessage, ulong> message, Cacheable<IMessageChannel, ulong> channel)
     {
-        // TODO: This event doesn't seem to be called
         if (Raids.Data.Remove(message.Id))
         {
             Console.WriteLine($"Raid MessageDeleted: {message.Id}");
@@ -750,7 +860,7 @@ internal partial class Raid
             }
 
             var messageDataRaw = await ch.GetMessageAsync(messageId);
-            if (messageDataRaw == null || messageDataRaw is not IUserMessage messageData)
+            if (messageDataRaw is not IUserMessage messageData)
             {
                 await command.RespondAsync("Unable to fetch message", ephemeral: true);
                 return null;
@@ -844,45 +954,6 @@ internal partial class Raid
                     await command.RespondAsync(msg, ephemeral: true);
                 }
                 break;
-            case "changetitle":
-                {
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raid) = raidResult.Value;
-                    var title = (string)options[1].Value;
-                    raid.Title = title;
-                    CleanSaveRaids();
-                    await messageData.ModifyAsync(m =>
-                    {
-                        m.Embed = BuildEmbed(raid);
-                        m.Components = BuildMessageComponents();
-                    });
-                    await command.RespondAsync($"Title changed to " + title, ephemeral: true);
-                }
-                break;
-            case "changetime":
-                {
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raid) = raidResult.Value;
-                    if (!TryParseTime((string)options[1].Value, out var time, out var timeErrorMessage))
-                    {
-                        await command.RespondAsync(timeErrorMessage, ephemeral: true);
-                        return;
-                    }
-
-                    raid.Time = time.ToUnixTimeSeconds();
-                    CleanSaveRaids();
-                    await messageData.ModifyAsync(m =>
-                    {
-                        m.Embed = BuildEmbed(raid);
-                        m.Components = BuildMessageComponents();
-                    });
-                    await command.RespondAsync($"Time changed to <t:{raid.Time}:F>", ephemeral: true);
-                }
-                break;
             case "clearsignups":
                 {
                     var raidResult = await GetRaid(0);
@@ -896,7 +967,7 @@ internal partial class Raid
                         m.Embed = BuildEmbed(raid);
                         m.Components = BuildMessageComponents();
                     });
-                    await command.RespondAsync($"Players cleared", ephemeral: true);
+                    await command.RespondAsync("Players cleared", ephemeral: true);
                 }
                 break;
             case "repost":
