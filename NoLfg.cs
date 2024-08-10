@@ -9,6 +9,7 @@ public class NoLfg
     private const ulong LfgChannel = 1209317207490957362UL;
     private const ulong LfgChatChannel = 1211466357669896284UL;
     private const ulong ModsRole = 1208599020134600734UL;
+    private const ulong MentorRole = 1208606814770565131UL;
 
     public NoLfg(DiscordSocketClient client)
     {
@@ -26,7 +27,8 @@ public class NoLfg
         if (author.IsBot || author.IsWebhook || author is SocketGuildUser user && user.Roles.Any(r => r.Id == ModsRole))
             return;
 
-        if (msg.Attachments.Count > 0 || msg.Embeds.Count > 0)
+        if (msg.Attachments.Count > 0 || msg.Embeds.Count > 0 || msg is SocketUserMessage { Poll: not null } &&
+            author is SocketGuildUser u2 && u2.Roles.Any(r => r.Id == MentorRole))
             return;
 
         var failed = false;
