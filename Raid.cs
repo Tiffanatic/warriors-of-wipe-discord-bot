@@ -30,7 +30,8 @@ internal class RaidData(
     ulong channel,
     ulong voiceChannel,
     ContentComp comp,
-    List<RaidDataMember> members)
+    List<RaidDataMember> members,
+    List<ChangelogEntry> log)
 {
     public string Title = title;
     public bool hasPinged = hasPinged;
@@ -42,6 +43,7 @@ internal class RaidData(
     public ulong VoiceChannel = voiceChannel;
     public ContentComp Comp = comp;
     public List<RaidDataMember> Members = members;
+    [OptionalField] public List<ChangelogEntry> Log = log;
 }
 
 [Serializable]
@@ -56,6 +58,15 @@ internal class RaidDataMember(ulong userId, string nick, string job, bool helper
 
     [NonSerialized] private Job? _jobData;
     public Job? JobData => _jobData ??= Raid.JobFromId(Job);
+}
+
+[Serializable]
+internal class ChangelogEntry(long time, ulong userId, string job, string action)
+{
+    public long Time = time;
+    public ulong UserId = userId;
+    public string Job = job;
+    public string Action = action;
 }
 
 [Serializable]
@@ -146,6 +157,13 @@ internal partial class Raid
             .AddOption(new SlashCommandOptionBuilder()
                 .WithName("repost")
                 .WithDescription("Deletes and reposts the raid, putting it at the bottom of the channel")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+                .AddOption("raid", ApplicationCommandOptionType.String,
+                    "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
+                .WithName("log")
+                .WithDescription("Prints the signup log for a raid")
                 .WithType(ApplicationCommandOptionType.SubCommand)
                 .AddOption("raid", ApplicationCommandOptionType.String,
                     "The raid - use \"Copy Message Link\" or \"Copy Message ID\" and paste it here", isRequired: true)
@@ -363,7 +381,7 @@ internal partial class Raid
 
         var hasPinged = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + PingTimeFuture > timestamp;
         var raidData = new RaidData(title, hasPinged, false, false, timestamp, command.User.Id, command.ChannelId ?? 0,
-            voiceChannel?.Id ?? 0, comp, []);
+            voiceChannel?.Id ?? 0, comp, [], []);
         var channel = await command.GetChannelAsync();
         var message = await channel.SendMessageAsync(allowedMentions: new(AllowedMentionTypes.None),
             components: BuildMessageComponents(), embed: BuildEmbed(raidData));
@@ -406,6 +424,8 @@ internal partial class Raid
                         {
                             raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
                             raidData.Members.Add(raidDataMember);
+                            raidData.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                                component.User.Id, raidDataMember.Job, component.Data.CustomId));
                             CleanSaveRaids();
                             await component.UpdateAsync(m =>
                             {
@@ -434,7 +454,20 @@ internal partial class Raid
             case "withdraw":
                 if (Raids.Data.TryGetValue(component.Message.Id, out var raidData2))
                 {
-                    raidData2.Members.RemoveAll(m => m.UserId == component.User.Id);
+                    RaidDataMember? removed = null;
+                    raidData2.Members.RemoveAll(m =>
+                    {
+                        if (m.UserId == component.User.Id)
+                        {
+                            removed = m;
+                            return true;
+                        }
+
+                        return false;
+                    });
+                    if (removed != null)
+                        raidData2.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
+                            removed.Job, component.Data.CustomId));
                     CleanSaveRaids();
                     await component.UpdateAsync(m =>
                     {
@@ -949,6 +982,8 @@ internal partial class Raid
 
                     raid.Members.RemoveAll(m => m.UserId == user.Id);
                     raid.Members.Add(raidDataMember);
+                    raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, job.Value.Id,
+                        "wipebotadmin " + option.Name));
                     CleanSaveRaids();
                     await messageData.ModifyAsync(m =>
                     {
@@ -966,7 +1001,20 @@ internal partial class Raid
                         return;
                     var (messageData, raid) = raidResult.Value;
                     var user = (IUser)options[1].Value;
-                    raid.Members.RemoveAll(m => m.UserId == user.Id);
+                    RaidDataMember? removed = null;
+                    raid.Members.RemoveAll(m =>
+                    {
+                        if (m.UserId == user.Id)
+                        {
+                            removed = m;
+                            return true;
+                        }
+
+                        return false;
+                    });
+                    if (removed != null)
+                        raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
+                            removed.Job, "wipebotadmin " + option.Name));
                     CleanSaveRaids();
                     await messageData.ModifyAsync(m =>
                     {
@@ -1001,6 +1049,7 @@ internal partial class Raid
                         return;
                     var (messageData, raid) = raidResult.Value;
                     raid.Members.Clear();
+                    raid.Log.Clear();
                     CleanSaveRaids();
                     await messageData.ModifyAsync(m =>
                     {
@@ -1023,6 +1072,17 @@ internal partial class Raid
                     CleanSaveRaids();
                     await messageData.DeleteAsync();
                     await command.RespondAsync("Reposted", ephemeral: true);
+                }
+                break;
+            case "log":
+                {
+                    var raidData = await GetRaidData(0);
+                    if (raidData == null)
+                        return;
+                    var changelog = string.Join(Environment.NewLine,
+                        raidData.Log.Select(r =>
+                            $"<t:{r.Time}:f> {MentionUtils.MentionUser(r.UserId)} {JobFromId(r.Job)?.Emote} - {r.Action}"));
+                    await command.RespondAsync(changelog, ephemeral: true);
                 }
                 break;
         }
