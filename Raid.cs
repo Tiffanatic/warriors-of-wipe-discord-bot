@@ -424,6 +424,7 @@ internal partial class Raid
                         {
                             raidData.Members.RemoveAll(m => m.UserId == component.User.Id);
                             raidData.Members.Add(raidDataMember);
+                            raidData.Log ??= [];
                             raidData.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                                 component.User.Id, raidDataMember.Job, component.Data.CustomId));
                             CleanSaveRaids();
@@ -466,8 +467,12 @@ internal partial class Raid
                         return false;
                     });
                     if (removed != null)
+                    {
+                        raidData2.Log ??= [];
                         raidData2.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
                             removed.Job, component.Data.CustomId));
+                    }
+
                     CleanSaveRaids();
                     await component.UpdateAsync(m =>
                     {
@@ -982,6 +987,7 @@ internal partial class Raid
 
                     raid.Members.RemoveAll(m => m.UserId == user.Id);
                     raid.Members.Add(raidDataMember);
+                    raid.Log ??= [];
                     raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, job.Value.Id,
                         "wipebotadmin " + option.Name));
                     CleanSaveRaids();
@@ -1013,8 +1019,12 @@ internal partial class Raid
                         return false;
                     });
                     if (removed != null)
+                    {
+                        raid.Log ??= [];
                         raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
                             removed.Job, "wipebotadmin " + option.Name));
+                    }
+
                     CleanSaveRaids();
                     await messageData.ModifyAsync(m =>
                     {
@@ -1049,6 +1059,7 @@ internal partial class Raid
                         return;
                     var (messageData, raid) = raidResult.Value;
                     raid.Members.Clear();
+                    raid.Log ??= [];
                     raid.Log.Clear();
                     CleanSaveRaids();
                     await messageData.ModifyAsync(m =>
@@ -1077,7 +1088,7 @@ internal partial class Raid
             case "log":
                 {
                     var raidData = await GetRaidData(0);
-                    if (raidData == null)
+                    if (raidData == null || raidData.Log == null)
                         return;
                     var changelog = string.Join(Environment.NewLine,
                         raidData.Log.Select(r =>
