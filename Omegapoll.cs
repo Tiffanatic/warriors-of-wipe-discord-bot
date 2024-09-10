@@ -156,6 +156,7 @@ public class Omegapoll
                         var channel = await command.GetChannelAsync();
                         foreach (var poll in list)
                             await channel.SendMessageAsync(poll: poll.ToProps());
+                        await command.RespondAsync($"Created polls from {name} ({list.Count} polls)", ephemeral: true);
                     }
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
