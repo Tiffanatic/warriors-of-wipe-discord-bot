@@ -42,6 +42,11 @@ public class Omegapoll
                     isRequired: true)
             )
             .AddOption(new SlashCommandOptionBuilder()
+                .WithName("listbatch")
+                .WithDescription("Lists all batches")
+                .WithType(ApplicationCommandOptionType.SubCommand)
+            )
+            .AddOption(new SlashCommandOptionBuilder()
                 .WithName("add")
                 .WithDescription("Adds a new poll to a poll batch")
                 .WithType(ApplicationCommandOptionType.SubCommand)
@@ -187,6 +192,13 @@ public class Omegapoll
                     }
                     else
                         await command.RespondAsync("Poll batch " + name + " doesn't exist", ephemeral: true);
+                }
+                break;
+            case "listbatch":
+                {
+                    var msg = string.Join("\n",
+                        Polls.Data.Select(kvp => $"{kvp.Key}: {string.Join(", ", kvp.Value.Select(v => v.Question))}"));
+                    await command.RespondAsync(msg, ephemeral: true);
                 }
                 break;
             case "add":
