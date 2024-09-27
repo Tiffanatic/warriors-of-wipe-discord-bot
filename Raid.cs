@@ -615,7 +615,8 @@ internal partial class Raid
             await modal.RespondAsync($"Ping from {modal.User.Mention}: {textInput.Value}\n{PingText(raidData, false)}",
                 ephemeral: false);
             var response = await modal.GetOriginalResponseAsync();
-            DeletePingAfterHour(response.Channel.Id, response.Id, id);
+            if (response.Channel is not IThreadChannel)
+                DeletePingAfterHour(response.Channel.Id, response.Id, id);
         }
         else
         {
@@ -834,7 +835,8 @@ internal partial class Raid
                     {
                         Console.WriteLine("Raid ping: " + raid.Title);
                         var pingMessage = await ch.SendMessageAsync(PingText(raid, true));
-                        DeletePingAfterHour(raid.Channel, pingMessage.Id, message);
+                        if (ch is not IThreadChannel)
+                            DeletePingAfterHour(raid.Channel, pingMessage.Id, message);
                     }
                 }
             }
