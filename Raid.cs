@@ -2,6 +2,7 @@
 using Discord.WebSocket;
 using System.Globalization;
 using System.Runtime.Serialization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace WarriorsOfWipeBot;
@@ -47,25 +48,42 @@ internal class RaidData(
 }
 
 [Serializable]
-internal class RaidDataMember(ulong userId, string nick, string job, bool helper, bool sprout, bool mentor)
+internal class RaidDataMember(ulong userId, string nick, List<string> jobs, bool helper, bool sprout, bool mentor)
 {
     public ulong UserId = userId;
     [OptionalField] public string Nick = nick;
-    public string Job = job;
+    public List<string> Jobs = jobs;
     public bool Helper = helper;
     public bool Sprout = sprout;
     public bool Mentor = mentor;
 
-    [NonSerialized] private Job? _jobData;
-    public Job? JobData => _jobData ??= Raid.JobFromId(Job);
+    [NonSerialized] private List<Job>? _jobsData;
+
+    public List<Job> JobData
+    {
+        get
+        {
+            if (_jobsData != null)
+                return _jobsData;
+            _jobsData = [];
+            foreach (var job in Jobs)
+            {
+                var jobData = Raid.JobFromId(job);
+                if (jobData != null)
+                    _jobsData.Add(jobData.Value);
+            }
+
+            return _jobsData;
+        }
+    }
 }
 
 [Serializable]
-internal class ChangelogEntry(long time, ulong userId, string job, string action)
+internal class ChangelogEntry(long time, ulong userId, List<string> jobs, string action)
 {
     public long Time = time;
     public ulong UserId = userId;
-    public string Job = job;
+    public List<string> Jobs = jobs;
     public string Action = action;
 }
 
@@ -245,7 +263,7 @@ internal partial class Raid
     private const ulong SproutRoleId = 1208606685615099955UL;
     private readonly DiscordSocketClient client;
     private readonly Json<Dictionary<ulong, RaidData>> Raids = new("raid.json");
-    private readonly Json<Dictionary<ulong, string>> UserJobs = new("userjobs.json");
+    private readonly Json<Dictionary<ulong, List<string>>> UserJobs = new("userjobs.json");
     private readonly Json<List<MessageDeleteEntry>> MsgDelete = new("msgdelete.json");
 
     public Raid(DiscordSocketClient client)
@@ -283,13 +301,30 @@ internal partial class Raid
         return null;
     }
 
-    public static string FormatMember(RaidDataMember raidDataMember)
+    public static int IndexOfJob(Job job)
     {
-        var jobEmote = JobFromId(raidDataMember.Job)?.Emote ?? raidDataMember.Job;
+        for (var i = 0; i < Jobs.Length; i++)
+            if (Jobs[i].Id == job.Id)
+                return i;
+        return -1;
+    }
+
+    private static string FormatMemberAllJobs(RaidDataMember raidDataMember)
+    {
+        StringBuilder sb = new();
+        foreach (var job in raidDataMember.JobData)
+            sb.Append(job.Emote);
+        sb.Append(' ');
+        sb.Append(FormatMemberNoJob(raidDataMember));
+        return sb.ToString();
+    }
+
+    public static string FormatMemberNoJob(RaidDataMember raidDataMember)
+    {
         var name = string.IsNullOrEmpty(raidDataMember.Nick)
             ? MentionUtils.MentionUser(raidDataMember.UserId)
             : raidDataMember.Nick;
-        return $"{jobEmote} {(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{name}";
+        return $"{(raidDataMember.Mentor ? crown : "")}{(raidDataMember.Sprout ? sprout : "")}{name}";
     }
 
     private static string GetNick(IUser user) =>
@@ -316,7 +351,7 @@ internal partial class Raid
 
         var playerList = raidData.Members.Where(m => !m.Helper).ToList();
         var players = string.Join("\n", RaidComp.FormatPlayerList(playerList, raidData.Comp, raidData.requiresMentor));
-        var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMember));
+        var helpers = string.Join("\n", raidData.Members.Where(m => m.Helper).Select(FormatMemberAllJobs));
         embed.AddField($"Confirmed raiders ({playerList.Count}/{raidData.Comp.Count})",
             string.IsNullOrWhiteSpace(players) ? PlaceholderDash : players, true);
         embed.AddField("Available if needed", string.IsNullOrWhiteSpace(helpers) ? PlaceholderDash : helpers, true);
@@ -426,7 +461,7 @@ internal partial class Raid
                             raidData.Members.Add(raidDataMember);
                             raidData.Log ??= [];
                             raidData.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                                component.User.Id, raidDataMember.Job, component.Data.CustomId));
+                                component.User.Id, raidDataMember.Jobs, component.Data.CustomId));
                             CleanSaveRaids();
                             await component.UpdateAsync(m =>
                             {
@@ -436,8 +471,7 @@ internal partial class Raid
                         }
                         else
                         {
-                            await component.RespondAsync(
-                                $"There is no room in the party for a {raidDataMember.JobData?.Name}", ephemeral: true);
+                            await component.RespondAsync("There is no room in the party", ephemeral: true);
                         }
                     }
                     else
@@ -470,7 +504,7 @@ internal partial class Raid
                     {
                         raidData2.Log ??= [];
                         raidData2.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
-                            removed.Job, component.Data.CustomId));
+                            removed.Jobs, component.Data.CustomId));
                     }
 
                     CleanSaveRaids();
@@ -497,9 +531,22 @@ internal partial class Raid
         {
             if (component.Data.CustomId == job.Id)
             {
-                UserJobs.Data[component.User.Id] = job.Id;
+                if (!UserJobs.Data.TryGetValue(component.User.Id, out var list))
+                    UserJobs.Data[component.User.Id] = list = [];
+                if (list.Count >= 3)
+                {
+                    await component.UpdateAsync(m => m.Content = "You cannot select more than 3 jobs");
+                    return;
+                }
+
+                list.Add(job.Id);
                 UserJobs.Save();
-                await component.UpdateAsync(m => m.Content = $"Selected {job.Emote}{job.Name}! Sign up for raids now");
+                var asdf = string.Join(", ", list.Select(j =>
+                {
+                    var resolved = JobFromId(j);
+                    return !resolved.HasValue ? "" : $"{resolved.Value.Emote}{resolved.Value.Name}";
+                }));
+                await component.UpdateAsync(m => m.Content = $"Selected {asdf}! Sign up for raids now, or select another job if you play multiple");
             }
         }
     }
@@ -515,19 +562,11 @@ internal partial class Raid
                 outdated ??= [];
                 outdated.Add(messageId);
             }
-            else
-            {
-                static int IndexOfJob(string job)
-                {
-                    for (var i = 0; i < Jobs.Length; i++)
-                        if (Jobs[i].Id == job)
-                            return i;
-                    return -1;
-                }
-
-                // whoops this is horrible runtime
-                raid.Members.Sort((a, b) => IndexOfJob(a.Job).CompareTo(IndexOfJob(b.Job)));
-            }
+            // else
+            // {
+            //     // whoops this is horrible runtime
+            //     raid.Members.Sort((a, b) => IndexOfJob(a.Job).CompareTo(IndexOfJob(b.Job)));
+            // }
         }
 
         if (outdated is not null)
@@ -953,151 +992,150 @@ internal partial class Raid
         {
             case "signup":
             case "helper":
+            {
+                static Job? JobFromIdOrName(string jobId)
                 {
-                    static Job? JobFromIdOrName(string jobId)
-                    {
-                        foreach (var j in Jobs)
-                            if (j.Id.Equals(jobId, StringComparison.InvariantCultureIgnoreCase) ||
-                                j.Name.Equals(jobId, StringComparison.InvariantCultureIgnoreCase))
-                                return j;
-                        return null;
-                    }
-
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raid) = raidResult.Value;
-                    var user = (IUser)options[1].Value;
-                    var jobText = (string)options[2].Value;
-                    var job = JobFromIdOrName(jobText);
-                    if (job == null)
-                    {
-                        await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
-                        return;
-                    }
-
-                    var (isSprout, isMentor) = IsMentorSprout(user);
-                    var raidDataMember = new RaidDataMember(user.Id, GetNick(user), job.Value.Id,
-                        option.Name == "helper", isSprout, isMentor);
-
-                    if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id, raid.requiresMentor))
-                    {
-                        await command.RespondAsync(
-                            $"There is no room in the party for a {raidDataMember.JobData?.Name}", ephemeral: true);
-                        return;
-                    }
-
-                    raid.Members.RemoveAll(m => m.UserId == user.Id);
-                    raid.Members.Add(raidDataMember);
-                    raid.Log ??= [];
-                    raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, job.Value.Id,
-                        "wipebotadmin " + option.Name));
-                    CleanSaveRaids();
-                    await messageData.ModifyAsync(m =>
-                    {
-                        m.Embed = BuildEmbed(raid);
-                        m.Components = BuildMessageComponents();
-                    });
-                    await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}",
-                        ephemeral: true);
-                    break;
+                    foreach (var j in Jobs)
+                        if (j.Id.Equals(jobId, StringComparison.InvariantCultureIgnoreCase) ||
+                            j.Name.Equals(jobId, StringComparison.InvariantCultureIgnoreCase))
+                            return j;
+                    return null;
                 }
+
+                var raidResult = await GetRaid(0);
+                if (!raidResult.HasValue)
+                    return;
+                var (messageData, raid) = raidResult.Value;
+                var user = (IUser)options[1].Value;
+                var jobText = (string)options[2].Value;
+                var job = JobFromIdOrName(jobText);
+                if (job == null)
+                {
+                    await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
+                    return;
+                }
+
+                var (isSprout, isMentor) = IsMentorSprout(user);
+                var raidDataMember = new RaidDataMember(user.Id, GetNick(user), [job.Value.Id],
+                    option.Name == "helper", isSprout, isMentor);
+
+                if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id, raid.requiresMentor))
+                {
+                    await command.RespondAsync("There is no room in the party", ephemeral: true);
+                    return;
+                }
+
+                raid.Members.RemoveAll(m => m.UserId == user.Id);
+                raid.Members.Add(raidDataMember);
+                raid.Log ??= [];
+                raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, [job.Value.Id],
+                    "wipebotadmin " + option.Name));
+                CleanSaveRaids();
+                await messageData.ModifyAsync(m =>
+                {
+                    m.Embed = BuildEmbed(raid);
+                    m.Components = BuildMessageComponents();
+                });
+                await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}",
+                    ephemeral: true);
+                break;
+            }
             case "withdraw":
+            {
+                var raidResult = await GetRaid(0);
+                if (!raidResult.HasValue)
+                    return;
+                var (messageData, raid) = raidResult.Value;
+                var user = (IUser)options[1].Value;
+                RaidDataMember? removed = null;
+                raid.Members.RemoveAll(m =>
                 {
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raid) = raidResult.Value;
-                    var user = (IUser)options[1].Value;
-                    RaidDataMember? removed = null;
-                    raid.Members.RemoveAll(m =>
+                    if (m.UserId == user.Id)
                     {
-                        if (m.UserId == user.Id)
-                        {
-                            removed = m;
-                            return true;
-                        }
-
-                        return false;
-                    });
-                    if (removed != null)
-                    {
-                        raid.Log ??= [];
-                        raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
-                            removed.Job, "wipebotadmin " + option.Name));
+                        removed = m;
+                        return true;
                     }
 
-                    CleanSaveRaids();
-                    await messageData.ModifyAsync(m =>
-                    {
-                        m.Embed = BuildEmbed(raid);
-                        m.Components = BuildMessageComponents();
-                    });
-                    await command.RespondAsync($"{user.Mention} removed from {raid.Title}", ephemeral: true);
-                    break;
-                }
-            case "whomadethis":
+                    return false;
+                });
+                if (removed != null)
                 {
-                    var raid = await GetRaidData(0);
-                    if (raid == null)
-                        return;
-                    await command.RespondAsync($"{MentionUtils.MentionUser(raid.Creator)}", ephemeral: true);
-                }
-                break;
-            case "whoisthis":
-                {
-                    var raid = await GetRaidData(0);
-                    if (raid == null)
-                        return;
-                    var msg = string.Join(Environment.NewLine,
-                        raid.Members.Select(m => $"{m.Nick} => {MentionUtils.MentionUser(m.UserId)}"));
-                    await command.RespondAsync(msg, ephemeral: true);
-                }
-                break;
-            case "clearsignups":
-                {
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raid) = raidResult.Value;
-                    raid.Members.Clear();
                     raid.Log ??= [];
-                    raid.Log.Clear();
-                    CleanSaveRaids();
-                    await messageData.ModifyAsync(m =>
-                    {
-                        m.Embed = BuildEmbed(raid);
-                        m.Components = BuildMessageComponents();
-                    });
-                    await command.RespondAsync("Players cleared", ephemeral: true);
+                    raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), removed.UserId,
+                        removed.Jobs, "wipebotadmin " + option.Name));
                 }
+
+                CleanSaveRaids();
+                await messageData.ModifyAsync(m =>
+                {
+                    m.Embed = BuildEmbed(raid);
+                    m.Components = BuildMessageComponents();
+                });
+                await command.RespondAsync($"{user.Mention} removed from {raid.Title}", ephemeral: true);
                 break;
+            }
+            case "whomadethis":
+            {
+                var raid = await GetRaidData(0);
+                if (raid == null)
+                    return;
+                await command.RespondAsync($"{MentionUtils.MentionUser(raid.Creator)}", ephemeral: true);
+                break;
+            }
+            case "whoisthis":
+            {
+                var raid = await GetRaidData(0);
+                if (raid == null)
+                    return;
+                var msg = string.Join(Environment.NewLine,
+                    raid.Members.Select(m => $"{m.Nick} => {MentionUtils.MentionUser(m.UserId)}"));
+                await command.RespondAsync(msg, ephemeral: true);
+                break;
+            }
+            case "clearsignups":
+            {
+                var raidResult = await GetRaid(0);
+                if (!raidResult.HasValue)
+                    return;
+                var (messageData, raid) = raidResult.Value;
+                raid.Members.Clear();
+                raid.Log ??= [];
+                raid.Log.Clear();
+                CleanSaveRaids();
+                await messageData.ModifyAsync(m =>
+                {
+                    m.Embed = BuildEmbed(raid);
+                    m.Components = BuildMessageComponents();
+                });
+                await command.RespondAsync("Players cleared", ephemeral: true);
+                break;
+            }
             case "repost":
-                {
-                    var raidResult = await GetRaid(0);
-                    if (!raidResult.HasValue)
-                        return;
-                    var (messageData, raidData) = raidResult.Value;
-                    var channel = await command.GetChannelAsync();
-                    var message = await channel.SendMessageAsync(allowedMentions: new(AllowedMentionTypes.None),
-                        components: BuildMessageComponents(), embed: BuildEmbed(raidData));
-                    Raids.Data.Add(message.Id, raidData);
-                    CleanSaveRaids();
-                    await messageData.DeleteAsync();
-                    await command.RespondAsync("Reposted", ephemeral: true);
-                }
+            {
+                var raidResult = await GetRaid(0);
+                if (!raidResult.HasValue)
+                    return;
+                var (messageData, raidData) = raidResult.Value;
+                var channel = await command.GetChannelAsync();
+                var message = await channel.SendMessageAsync(allowedMentions: new(AllowedMentionTypes.None),
+                    components: BuildMessageComponents(), embed: BuildEmbed(raidData));
+                Raids.Data.Add(message.Id, raidData);
+                CleanSaveRaids();
+                await messageData.DeleteAsync();
+                await command.RespondAsync("Reposted", ephemeral: true);
                 break;
+            }
             case "log":
-                {
-                    var raidData = await GetRaidData(0);
-                    if (raidData == null || raidData.Log == null)
-                        return;
-                    var changelog = string.Join(Environment.NewLine,
-                        raidData.Log.Select(r =>
-                            $"<t:{r.Time}:f> {MentionUtils.MentionUser(r.UserId)} {JobFromId(r.Job)?.Emote} - {r.Action}"));
-                    await command.RespondAsync(changelog, ephemeral: true);
-                }
+            {
+                var raidData = await GetRaidData(0);
+                if (raidData == null || raidData.Log == null)
+                    return;
+                var changelog = string.Join(Environment.NewLine,
+                    raidData.Log.Select(r =>
+                        $"<t:{r.Time}:f> {MentionUtils.MentionUser(r.UserId)} {string.Join(",", r.Jobs.Select(j => JobFromId(j)?.Emote))} - {r.Action}"));
+                await command.RespondAsync(changelog, ephemeral: true);
                 break;
+            }
         }
     }
 }
