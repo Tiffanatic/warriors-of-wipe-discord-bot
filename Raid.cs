@@ -1013,17 +1013,22 @@ internal partial class Raid
                     return;
                 var (messageData, raid) = raidResult.Value;
                 var user = (IUser)options[1].Value;
-                var jobText = (string)options[2].Value;
-                var job = JobFromIdOrName(jobText);
-                if (job == null)
+                var jobsText = (string)options[2].Value;
+                var jobs = new List<string>();
+                foreach (var jobText in jobsText.Split(',', ' ', ';'))
                 {
-                    await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
-                    return;
+                    var job = JobFromIdOrName(jobText);
+                    if (job == null)
+                    {
+                        await command.RespondAsync("Invalid job " + jobText, ephemeral: true);
+                        return;
+                    }
+
+                    jobs.Add(job.Value.Id);
                 }
 
                 var (isSprout, isMentor) = IsMentorSprout(user);
-                var raidDataMember = new RaidDataMember(user.Id, GetNick(user), [job.Value.Id],
-                    option.Name == "helper", isSprout, isMentor);
+                var raidDataMember = new RaidDataMember(user.Id, GetNick(user), jobs, option.Name == "helper", isSprout, isMentor);
 
                 if (!RaidComp.CanAddPlayer(raid.Members, raidDataMember, raid.Comp, user.Id, raid.requiresMentor))
                 {
@@ -1034,7 +1039,7 @@ internal partial class Raid
                 raid.Members.RemoveAll(m => m.UserId == user.Id);
                 raid.Members.Add(raidDataMember);
                 raid.Log ??= [];
-                raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, [job.Value.Id],
+                raid.Log.Add(new ChangelogEntry(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), user.Id, jobs,
                     "wipebotadmin " + option.Name));
                 CleanSaveRaids();
                 await messageData.ModifyAsync(m =>
@@ -1042,7 +1047,7 @@ internal partial class Raid
                     m.Embed = BuildEmbed(raid);
                     m.Components = BuildMessageComponents();
                 });
-                await command.RespondAsync($"{user.Mention} as {job.Value.Name} added to {raid.Title}",
+                await command.RespondAsync($"{user.Mention} as {string.Join(",", jobs)} added to {raid.Title}",
                     ephemeral: true);
                 break;
             }
