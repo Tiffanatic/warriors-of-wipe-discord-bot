@@ -1136,10 +1136,31 @@ internal partial class Raid
                 var raidData = await GetRaidData(0);
                 if (raidData == null || raidData.Log == null)
                     return;
-                var changelog = string.Join(Environment.NewLine,
-                    raidData.Log.Select(r =>
-                        $"<t:{r.Time}:f> {MentionUtils.MentionUser(r.UserId)} {string.Join(",", r.Jobs.Select(j => JobFromId(j)?.Emote))} - {r.Action}"));
-                await command.RespondAsync(changelog, ephemeral: true);
+                var msgList = raidData.Log.Select(r => $"<t:{r.Time}:f> {MentionUtils.MentionUser(r.UserId)} {string.Join(",", r.Jobs.Select(j => JobFromId(j)?.Emote))} - {r.Action}").ToList();
+                var changelog = string.Join(Environment.NewLine, msgList);
+                const int maxMessageLength = 2000;
+                if (changelog.Length >= maxMessageLength)
+                {
+                    await command.RespondAsync("Changelog message too long, DM'ing you the changelog", ephemeral: true);
+
+                    for (var i = 0; i < msgList.Count - 1; i++)
+                    {
+                        if (msgList[i].Length + msgList[i + 1].Length < maxMessageLength)
+                        {
+                            msgList[i] += msgList[i + 1];
+                            msgList.RemoveAt(i + 1);
+                            i--;
+                        }
+                    }
+
+                    foreach (var msg in msgList)
+                        await command.User.SendMessageAsync(msg);
+                }
+                else
+                {
+                    await command.RespondAsync(changelog, ephemeral: true);
+                }
+
                 break;
             }
         }
