@@ -143,7 +143,7 @@ internal static class RaidComp
                 memberList.RemoveAt(i);
         memberList.Add(toAdd);
 
-        if (requiresMentor && !HasMentor(members, out var count) && count == contentComp.Count)
+        if (requiresMentor && !HasMentor(memberList, out var count) && count == contentComp.Count)
             return false;
 
         var iterator = new CompIterator(memberList, contentComp);

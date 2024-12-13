@@ -539,6 +539,12 @@ internal partial class Raid
                     return;
                 }
 
+                if (list.Contains(job.Id))
+                {
+                    await component.UpdateAsync(m => m.Content = "You already selected that job! Sign up for raids now, or keep adding other jobs.");
+                    return;
+                }
+
                 list.Add(job.Id);
                 UserJobs.Save();
                 var asdf = string.Join(", ", list.Select(j =>
