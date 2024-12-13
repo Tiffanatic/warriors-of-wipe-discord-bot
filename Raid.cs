@@ -1145,9 +1145,9 @@ internal partial class Raid
 
                     for (var i = 0; i < msgList.Count - 1; i++)
                     {
-                        if (msgList[i].Length + msgList[i + 1].Length < maxMessageLength)
+                        if (msgList[i].Length + msgList[i + 1].Length + Environment.NewLine.Length < maxMessageLength)
                         {
-                            msgList[i] += msgList[i + 1];
+                            msgList[i] += Environment.NewLine + msgList[i + 1];
                             msgList.RemoveAt(i + 1);
                             i--;
                         }
