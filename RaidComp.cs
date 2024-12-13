@@ -195,6 +195,9 @@ internal static class RaidComp
 
         private bool Iterate(int index, in CompCount compCount)
         {
+            while (index < Members.Count && Members[index].Helper)
+                index++;
+
             if (index >= Members.Count)
             {
                 var totalSlotsAvailable = _contentComp.Count - compCount.Count;
@@ -205,11 +208,6 @@ internal static class RaidComp
             }
 
             var member = Members[index];
-            if (member.Helper)
-            {
-                Iterate(index + 1, in compCount);
-                return true;
-            }
 
             var valid = false;
             for (var i = 0; i < member.JobData.Count; i++)
