@@ -921,8 +921,12 @@ internal partial class Raid
             MsgDelete.Data.RemoveAt(i);
             msgDeleteChanged = true;
 
-            if (await client.GetChannelAsync(entry.ChannelId) is IMessageChannel ch)
-                await ch.DeleteMessageAsync(entry.MessageId);
+            try {
+                if (await client.GetChannelAsync(entry.ChannelId) is IMessageChannel ch)
+                    await ch.DeleteMessageAsync(entry.MessageId);
+            } catch (Exception e) {
+                Console.WriteLine(e);
+            }
         }
 
         if (msgDeleteChanged)
